@@ -3,8 +3,6 @@ import { createPortal } from "react-dom";
 import { Reports, api, downloadReportsXlsx } from "../lib/api";
 
 /* ================= helpers ================= */
-const MSK_OFFSET_MIN = 3 * 60;            // UTC+3, без переходов
-const MSK_OFFSET_MS  = MSK_OFFSET_MIN * 60 * 1000;
 
 type Tab = "all" | "arch";
 type Person = {
@@ -39,45 +37,30 @@ function telegramOf(p?: Person) {
 
 function toInputDT(iso: string | Date | null | undefined) {
   if (!iso) return "";
-  const d = typeof iso === "string" ? new Date(iso) : iso; // это UTC
+  const d = typeof iso === "string" ? new Date(iso) : iso;
   if (Number.isNaN(d.getTime())) return "";
-  // сдвигаем на +3ч и читаем через getUTC*, чтобы исключить локальную тайзону
-  const ms = d.getTime() + MSK_OFFSET_MS;
-  const msk = new Date(ms);
-  const yyyy = msk.getUTCFullYear();
-  const mm   = String(msk.getUTCMonth() + 1).padStart(2, "0");
-  const dd   = String(msk.getUTCDate()).padStart(2, "0");
-  const HH   = String(msk.getUTCHours()).padStart(2, "0");
-  const MM   = String(msk.getUTCMinutes()).padStart(2, "0");
+  const yyyy = d.getUTCFullYear();
+  const mm   = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dd   = String(d.getUTCDate()).padStart(2, "0");
+  const HH   = String(d.getUTCHours()).padStart(2, "0");
+  const MM   = String(d.getUTCMinutes()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}T${HH}:${MM}`;
 }
 
-function toIsoWithMSKOffset(v: string): string | null {
+// Из значения datetime-local делаем ISO-строку с Z (UTC) без сдвигов.
+// Было "2025-10-14T08:06" -> станет "2025-10-14T08:06:00Z".
+function inputToIsoUTC(v: string): string | null {
   if (!v) return null;
-  // Ожидаем стандарт 'YYYY-MM-DDTHH:MM' (браузер может отображать локализованно,
-  // но value всегда в таком формате)
   const [datePart, timePart] = v.split("T");
   if (!datePart || !timePart) return null;
-  const [yyyy, mm, dd] = datePart.split("-").map(Number);
-  const [HH, MM] = timePart.split(":").map(Number);
-  if (
-    !Number.isFinite(yyyy) || !Number.isFinite(mm) || !Number.isFinite(dd) ||
-    !Number.isFinite(HH) || !Number.isFinite(MM)
-  ) return null;
-  // Формируем локальное МСК-время с явным оффсетом
-  const y = String(yyyy).padStart(4, "0");
-  const m = String(mm).padStart(2, "0");
-  const d = String(dd).padStart(2, "0");
-  const h = String(HH).padStart(2, "0");
-  const i = String(MM).padStart(2, "0");
-  return `${y}-${m}-${d}T${h}:${i}:00+03:00`;
+  return `${datePart}T${timePart}:00Z`;
 }
 
+// Блок даты/времени: форматируем по UTC-компонентам, без сдвигов.
 function fmtDateBlock(start?: string, end?: string) {
   if (!start) return "-";
-  const sUTC = new Date(start);
-  if (Number.isNaN(sUTC.getTime())) return "-";
-  const s = new Date(sUTC.getTime() + MSK_OFFSET_MS); // в МСК
+  const s = new Date(start);
+  if (Number.isNaN(s.getTime())) return "-";
   const dd = String(s.getUTCDate()).padStart(2, "0");
   const mm = String(s.getUTCMonth() + 1).padStart(2, "0");
   const yyyy = s.getUTCFullYear();
@@ -86,9 +69,8 @@ function fmtDateBlock(start?: string, end?: string) {
 
   let second = "—";
   if (end) {
-    const eUTC = new Date(end);
-    if (!Number.isNaN(eUTC.getTime())) {
-      const e = new Date(eUTC.getTime() + MSK_OFFSET_MS);
+    const e = new Date(end);
+    if (!Number.isNaN(e.getTime())) {
       second = `${String(e.getUTCHours()).padStart(2, "0")}:${String(
         e.getUTCMinutes()
       ).padStart(2, "0")}`;
@@ -246,7 +228,7 @@ function EditModal({
     personId: report.person?.id || report.person_id || report.user_id || "",
     projectId: report.project?.id || report.project_id || "",
     // ВАЖНО: если новый отчёт — показываем ТЕКУЩЕЕ МСК-время, не уезжая на +3ч
-    start_time: toInputDT(report.start_time || new Date(Date.now() - MSK_OFFSET_MS)),
+    start_time: toInputDT(report.start_time || new Date()), // показываем как есть (UTC)
     end_time: toInputDT(report.end_time),
     text_report: report.text_report || "",
     photo_link: report.photo_link || "",
@@ -297,19 +279,19 @@ function EditModal({
         archived: !!form.archived,
       };
 
-      const isoStartMSK = currStartStr ? toIsoWithMSKOffset(currStartStr) : null;
-      const isoEndMSK   = currEndStr   ? toIsoWithMSKOffset(currEndStr)   : null;
+      const isoStartUTC = currStartStr ? inputToIsoUTC(currStartStr) : null;
+      const isoEndUTC   = currEndStr   ? inputToIsoUTC(currEndStr)   : null;
 
       if (isCreate) {
-        if (isoStartMSK) payload.start_time = isoStartMSK;
-        if (isoEndMSK)   payload.end_time   = isoEndMSK;
+        if (isoStartUTC) payload.start_time = isoStartUTC;
+        if (isoEndUTC)   payload.end_time   = isoEndUTC;
         await Reports.create(payload);
       } else {
         if (currStartStr !== origStartStr) {
-          payload.start_time = isoStartMSK; // может быть null — очистим поле
+          payload.start_time = isoStartUTC; // может быть null — очистим поле
         }
         if (currEndStr !== origEndStr) {
-          payload.end_time = isoEndMSK;
+          payload.end_time = isoEndUTC;
         }
         await Reports.update(report._id, payload);
       }
