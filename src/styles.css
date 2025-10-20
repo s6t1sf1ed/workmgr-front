@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 255 255 255;
+    --foreground: 15 23 42;
+    --muted: 248 250 252;
+    --muted-foreground: 100 116 139;
+    --border: 226 232 240;
+  }
+  .dark {
+    --background: 2 6 23;
+    --foreground: 226 232 240;
+    --muted: 15 23 42;
+    --muted-foreground: 148 163 184;
+    --border: 51 65 85;
+  }
+  body { @apply bg-background text-foreground; }
+}
+
+/* === мягкая зебра для таблиц + hover (видно, но не режет глаз) === */
+@layer utilities {
+  .zebra tbody tr:nth-child(odd) { @apply bg-muted/100; }
+  .zebra tbody tr:nth-child(even) { @apply bg-background; }
+  .zebra tbody tr { @apply transition-colors; }
+  .zebra tbody tr:hover { @apply bg-muted/100; }
+}
