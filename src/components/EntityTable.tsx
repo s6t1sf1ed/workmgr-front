@@ -68,7 +68,6 @@ export default function EntityTable({
 }: {
   entity: Entity;
   archived?: boolean;
-  /** B:@KBL AB@0=8FC ?@>5:B0 ?> :;8:C =0 AB@>:C ?@>5:B0 */
   onOpenProject?: (id: string) => void;
 }) {
   const [items, setItems] = useState<any[]>([]);
@@ -546,22 +545,22 @@ export default function EntityTable({
                   <td className="p-2 align-top">{it.seq ?? idx + 1}</td>
                   <td className="p-2 align-top">
                     {entity === "project" && (
-                      <div>
-                        <div className="font-medium">
-                          {it.name || "Без названия"}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="font-medium truncate">{it.name || "Без названия"}</div>
+
+                        <div className="text-xs text-muted-foreground text-right flex-1 flex justify-end flex-wrap gap-x-3 gap-y-0.5">
+                          {it.description && <span className="truncate max-w-[24ch]">{it.description}</span>}
+                          {(it.address || (it.latitude && it.longitude)) && (
+                            <span className="truncate max-w-[28ch]">
+                              {it.address
+                                ? it.address
+                                : (it.latitude && it.longitude) ? `(${it.latitude}, ${it.longitude})` : ""}
+                            </span>
+                          )}
+                          {it.ask_location && <span>запрашивать гео</span>}
+                          <span>{Array.isArray(it.accessPersons) ? it.accessPersons.length : 0} сотрудников с доступом</span>
+
                         </div>
-                        <div className="text-muted-foreground">
-                          {it.description || ""}
-                        </div>
-                        {/* при наличии адреса/координат подскажем в списке маленькой строкой */}
-                        {(it.address || (it.latitude && it.longitude)) && (
-                          <div className="text-xs text-muted-foreground mt-1">
-                            {it.address ? `${it.address} · ` : ""}
-                            {(it.latitude && it.longitude) ? `(${it.latitude}, ${it.longitude})` : ""}
-                            {it.ask_location ? " · запрашивать гео" : ""}
-                          </div>
-                        )}
-                        <div className="text-xs text-muted-foreground mt-1">{extraLine}</div>
                       </div>
                     )}
                     {entity === "person" && (

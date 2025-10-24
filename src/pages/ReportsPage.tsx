@@ -224,6 +224,85 @@ function EditModal({
   const [persons, setPersons] = useState<Person[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
 
+  const LS_ONLY_ACTIVE_PERSONS  = "ui.reports.filter.person.onlyActive";
+  const LS_ONLY_ACTIVE_PROJECTS = "ui.reports.filter.project.onlyActive";
+
+  const [onlyActivePersonsEM, setOnlyActivePersonsEM] = useState<boolean>(() => {
+    return (localStorage.getItem(LS_ONLY_ACTIVE_PERSONS) ?? "1") !== "0";
+  });
+  const [onlyActiveProjectsEM, setOnlyActiveProjectsEM] = useState<boolean>(() => {
+    return (localStorage.getItem(LS_ONLY_ACTIVE_PROJECTS) ?? "1") !== "0";
+  });
+
+  // загрузка справочников с учётом переключателя
+  async function loadPersonsEM(onlyActive: boolean) {
+    try {
+      if (onlyActive) {
+        const r = await api("/api/person?archived=0&limit=2000");
+        setPersons((r?.items || r || []) as Person[]);
+        return;
+      }
+      // нужны и активные, и архивные
+      const [a0, a1] = await Promise.all([
+        api("/api/person?archived=0&limit=2000"),
+        api("/api/person?archived=1&limit=2000"),
+      ]);
+      const items = ([...(a0?.items || a0 || []), ...(a1?.items || a1 || [])] as Person[]);
+      const byId = new Map<string, Person>();
+      for (const p of items) byId.set(String((p as any)?._id || (p as any)?.id || ""), p);
+      setPersons([...byId.values()]);
+    } catch {
+      // фолбэк на /api/users
+      if (onlyActive) {
+        const r2 = await api("/api/users?archived=0");
+        setPersons((r2?.items || r2 || []) as Person[]);
+        return;
+      }
+      const [u0, u1] = await Promise.all([
+        api("/api/users?archived=0"),
+        api("/api/users?archived=1"),
+      ]);
+      const items = ([...(u0?.items || u0 || []), ...(u1?.items || u1 || [])] as Person[]);
+      const byId = new Map<string, Person>();
+      for (const p of items) byId.set(String((p as any)?._id || (p as any)?.id || ""), p);
+      setPersons([...byId.values()]);
+    }
+  }
+
+  async function loadProjectsEM(onlyActive: boolean) {
+    if (onlyActive) {
+      const pr = await api("/api/project?archived=0&limit=2000");
+      setProjects((pr?.items || pr || []) as Project[]);
+      return;
+    }
+    const [p0, p1] = await Promise.all([
+      api("/api/project?archived=0&limit=2000"),
+      api("/api/project?archived=1&limit=2000"),
+    ]);
+    const items = ([...(p0?.items || p0 || []), ...(p1?.items || p1 || [])] as Project[]);
+    const byId = new Map<string, Project>();
+    for (const p of items) byId.set(String((p as any)?._id || (p as any)?.id || ""), p);
+    setProjects([...byId.values()]);
+  }
+
+  // первичная загрузка
+  useEffect(() => {
+    loadPersonsEM(onlyActivePersonsEM);
+    loadProjectsEM(onlyActiveProjectsEM);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // реагируем на переключатели
+  useEffect(() => {
+    localStorage.setItem(LS_ONLY_ACTIVE_PERSONS, onlyActivePersonsEM ? "1" : "0");
+    loadPersonsEM(onlyActivePersonsEM);
+  }, [onlyActivePersonsEM]);
+
+  useEffect(() => {
+    localStorage.setItem(LS_ONLY_ACTIVE_PROJECTS, onlyActiveProjectsEM ? "1" : "0");
+    loadProjectsEM(onlyActiveProjectsEM);
+  }, [onlyActiveProjectsEM]);
+
   const [form, setForm] = useState(() => ({
     personId: report.person?.id || report.person_id || report.user_id || "",
     projectId: report.project?.id || report.project_id || "",
@@ -318,12 +397,21 @@ function EditModal({
               onChange={(e) => set("personId", e.target.value)}
             >
               <option value="">- не выбран -</option>
-              {persons.map((p) => (
+              {(onlyActivePersonsEM ? persons.filter((p: any) => !p?.archived) : persons).map((p) => (
                 <option key={idOf(p)} value={idOf(p)}>
-                  {displayName(p) || p.email || idOf(p)}
+                  {(displayName(p) || (p as any).email || idOf(p)) + ((p as any)?.archived ? " (архив)" : "")}
                 </option>
               ))}
             </select>
+
+            <label className="mt-1 flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={onlyActivePersonsEM}
+                onChange={(e) => setOnlyActivePersonsEM(e.target.checked)}
+              />
+              <span>Только активные</span>
+            </label>
           </label>
 
           <label className="flex flex-col gap-1">
@@ -343,12 +431,21 @@ function EditModal({
               onChange={(e) => set("projectId", e.target.value)}
             >
               <option value="">- не выбран -</option>
-              {projects.map((p) => (
+              {(onlyActiveProjectsEM ? projects.filter((p: any) => !p?.archived) : projects).map((p) => (
                 <option key={idOf(p)} value={idOf(p)}>
-                  {p.name}
+                  {((p as any).name || idOf(p)) + ((p as any)?.archived ? " (архив)" : "")}
                 </option>
               ))}
             </select>
+
+            <label className="mt-1 flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={onlyActiveProjectsEM}
+                onChange={(e) => setOnlyActiveProjectsEM(e.target.checked)}
+              />
+              <span>Только активные</span>
+            </label>
           </label>
 
           <label className="flex items-center gap-2 mt-6">

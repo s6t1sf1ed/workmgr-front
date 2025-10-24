@@ -153,3 +153,21 @@ export const Tasks = {
   update: (id: string, data: any) => api(`/api/task/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   remove: (id: string) => api(`/api/task/${id}`, { method: "DELETE" }),
 };
+
+// === SPECS ===
+export const Specs = {
+  listSections:   (projectId: string) => api(`/api/projects/${projectId}/spec/sections`),
+  createSection:  (projectId: string, data: any) => api(`/api/projects/${projectId}/spec/sections`, { method: "POST", body: JSON.stringify(data) }),
+  updateSection:  (id: string, data: any) => api(`/api/spec/sections/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteSection:  (id: string) => api(`/api/spec/sections/${id}`, { method: "DELETE" }),
+
+  listItems:      (projectId: string, deleted = false) => api(`/api/projects/${projectId}/spec/items?deleted=${deleted?1:0}`),
+  createItem:     (projectId: string, data: any) => api(`/api/projects/${projectId}/spec/items`, { method: "POST", body: JSON.stringify(data) }),
+  // commit правок
+  commitItem:     (id: string, data: any) => api(`/api/spec/items/${id}`, { method: "PATCH", body: JSON.stringify({ commit: true, data }) }),
+  // переключить активную версию
+  setItemVersion: (id: string, v: number) => api(`/api/spec/items/${id}`, { method: "PATCH", body: JSON.stringify({ setActiveVersion: v }) }),
+  // перенос секции / soft delete / restore
+  updateItem:     (id: string, data: any) => api(`/api/spec/items/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteForever:  (id: string) => api(`/api/spec/items/${id}`, { method: "DELETE" }),
+};

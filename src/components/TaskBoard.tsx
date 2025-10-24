@@ -67,7 +67,7 @@ export default function TaskBoard() {
     const items = res.items || [];
     setProjects(items);
     const sys = items.find((p: any) => p.isSystem);
-    setSysProjectId(sys?.id || null);
+    setSysProjectId(sys?._id || null);
   }
 
   useEffect(() => { load(); loadProjects(); }, []);
@@ -152,7 +152,7 @@ export default function TaskBoard() {
             <option value="">Все</option>
             <option value="__none">Без проекта (Inbox)</option>
             {projects.filter((p: any) => !p.isSystem).map((p: any) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
+              <option key={p._id} value={p._id}>{p.name}</option>
             ))}
           </select>
         </div>
@@ -264,7 +264,7 @@ function Column({
                 >
                   <option value="">Без проекта (Inbox)</option>
                   {projects.filter((p:any)=>!p.isSystem).map((p:any)=>(
-                    <option key={p.id} value={p.id}>{p.name}</option>
+                    <option key={p._id} value={p._id}>{p.name}</option>
                   ))}
                 </select>
 

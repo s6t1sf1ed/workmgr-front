@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Projects, Tasks, ProjectFiles, api, apiBlob } from "../lib/api";
 import { formatDateTimeRu } from "../lib/dates";
+import { DayPicker } from "react-day-picker";
+import "react-day-picker/dist/style.css";
+import { createPortal } from "react-dom";
+import SpecsTab from "../components/SpecsTab";
 
 const Icon = {
   Pencil: (p: any) => (
@@ -38,6 +42,22 @@ const Icon = {
       <path fill="currentColor" d="M18.3 5.7L12 12l6.3 6.3-1.4 1.4L10.6 13.4 4.3 19.7 2.9 18.3 9.2 12 2.9 5.7 4.3 4.3l6.3 6.3 6.3-6.3z"/>
     </svg>
   ),
+  Calendar: (p: any) => (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden {...p}>
+      {/* рамка + шапка */}
+      <path fill="currentColor" d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 14H5V9h14v9Z" />
+    </svg>
+  ),
+  CalendarCheck: (p: any) => (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden {...p}>
+      <path fill="currentColor" d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 14H5V9h14v9Zm-8.2-3.3-2.1-2.1-1.4 1.4 2.8 2.8a1 1 0 0 0 1.4 0l5-5-1.4-1.4-4.3 4.3Z"/>
+    </svg>
+  ),
+  CalendarDays: (p: any) => (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden {...p}>
+      <path fill="currentColor" d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 14H5V9h14v9ZM7 11h2v2H7v-2Zm4 0h2v2h-2v-2Zm4 0h2v2h-2v-2ZM7 15h2v2H7v-2Zm4 0h2v2h-2v-2Zm4 0h2v2h-2v-2Z"/>
+    </svg>
+  ),
 };
 const iconBtn =
   "inline-flex items-center justify-center rounded-md border w-8 h-8 text-foreground/80 hover:text-foreground hover:bg-muted transition";
@@ -61,7 +81,7 @@ function AccessChecklist({ options, value, onChange, emptyText = "Пусто" }:
     <div className="space-y-2">
       {options.length===0? <div className="text-xs text-muted-foreground">{emptyText}</div> : <>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={allChecked} onChange={toggleAll}/>Выбрать все</label>
-        <div className="max-h-60 overflow-auto rounded-xl border p-2">
+        <div className="max-h-[52vh] overflow-auto rounded-xl border p-2">
           {options.map(op=>(
             <label key={op.id} className="flex items-center gap-2 py-1">
               <input type="checkbox" checked={(value||[]).includes(op.id)} onChange={e=>set(op.id,e.target.checked)}/>
@@ -76,10 +96,25 @@ function AccessChecklist({ options, value, onChange, emptyText = "Пусто" }:
 
 export default function ProjectViewPage({ projectId, onBack }:{ projectId:string; onBack:()=>void; }) {
   const [project, setProject] = useState<any>(null);
-  const [tab, setTab] = useState<"tasks"|"access"|"files">("tasks");
+  const [tab, setTab] = useState<"tasks"|"access"|"files"|"worklog"|"specs">("tasks");
 
   // задачи
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [newTask, setNewTask] = useState({ title: "", status: "new" as "new"|"in_progress"|"done" });
+  async function createTask() {
+    const title = newTask.title.trim();
+    if (!title) return;
+    await api("/api/task", {
+      method: "POST",
+      body: JSON.stringify({
+        title,
+        status: newTask.status,
+        projectId,
+      }),
+    });
+    setNewTask({ title: "", status: "new" });
+    await loadTasks();
+  }
 
   // доступы
   const [allPersons, setAllPersons] = useState<Person[]>([]);
@@ -212,17 +247,12 @@ export default function ProjectViewPage({ projectId, onBack }:{ projectId:string
 
           {/* адрес + координаты + чекбокс + кнопка редактирования */}
           <div className="mt-1 text-sm text-muted-foreground space-y-1">
-            {project?.address && <div>{project.address}</div>}
-            {(project?.latitude || project?.longitude) && (
+            {mapLinks && (
               <div>
-                {project?.latitude ?? "-"}, {project?.longitude ?? "-"}
-                {mapLinks && (
-                  <> · <a className="underline" href={mapLinks.yandex} target="_blank" rel="noreferrer">Яндекс</a> / <a className="underline" href={mapLinks.google} target="_blank" rel="noreferrer">Google</a></>
-                )}
+                <a className="underline" href={mapLinks.yandex} target="_blank" rel="noreferrer">Яндекс</a>
+                {" / "}
+                <a className="underline" href={mapLinks.google} target="_blank" rel="noreferrer">Google</a>
               </div>
-            )}
-            {typeof project?.radius_m === "number" && project.radius_m > 0 && (
-              <div>Радиус допуска: {project.radius_m} м</div>
             )}
             <div className="flex items-center gap-2">
               <span className="rounded-md border px-2 py-0.5">
@@ -233,50 +263,73 @@ export default function ProjectViewPage({ projectId, onBack }:{ projectId:string
               </button>
             </div>
           </div>
-        </div>
 
         <div className="ml-auto text-sm text-muted-foreground">
           Обновлено: {formatDateTimeRu(project?.updatedAt)}
         </div>
       </div>
+    </div>
 
       {/* вкладки */}
       <div className="flex items-center gap-2">
+        <button className={`rounded-XL border px-3 py-1 ${tab==="specs"?"bg-muted/50":""}`} onClick={()=>setTab("specs")}>Спецификации</button>
         <button className={`rounded-xl border px-3 py-1 ${tab === "tasks" ? "bg-muted/50" : ""}`} onClick={() => setTab("tasks")}>Задачи</button>
         <button className={`rounded-xl border px-3 py-1 ${tab === "access" ? "bg-muted/50" : ""}`} onClick={() => setTab("access")}>Сотрудники с доступом</button>
         <button className={`rounded-xl border px-3 py-1 ${tab === "files" ? "bg-muted/50" : ""}`} onClick={() => setTab("files")}>Диск</button>
+        <button className={`rounded-xl border px-3 py-1 ${tab === "worklog" ? "bg-muted/50" : ""}`} onClick={() => setTab("worklog")}>Журнал работ</button>
       </div>
 
       {/* содержимое вкладок — как было */}
       {tab === "tasks" && (
-        <div className="rounded-2xl border overflow-auto">
-          <table className="w-full text-sm zebra">
-            <thead className="bg-muted/50 sticky top-0">
-              <tr><th className="p-2 text-left">№</th><th className="p-2 text-left">Название</th><th className="p-2 text-left">Статус</th><th className="p-2 text-left">Обновлено</th><th className="p-2 text-left w-24"></th></tr>
-            </thead>
-            <tbody>
-              {tasks.map((t,i)=>(
-                <tr key={t._id} className="border-t">
-                  <td className="p-2 align-top">{i+1}</td>
-                  <td className="p-2 align-top">{t.title||"(без названия)"}</td>
-                  <td className="p-2 align-top">{t.status||""}</td>
-                  <td className="p-2 align-top">{formatDateTimeRu(t.updatedAt)}</td>
-                  <td className="p-2">
-                    <div className="flex gap-2">
-                      <button className={iconBtn} title={t.archived?"Убрать из архива":"В архив"} aria-label={t.archived?"Убрать из архива":"В архив"} onClick={()=>toggleTaskArchive(t)}>
-                        {t.archived?<Icon.Unarchive/>:<Icon.Archive/>}
-                      </button>
-                      <button className={`${iconBtn} border-red-200 hover:bg-red-50 text-red-600`} title="Удалить" aria-label="Удалить" onClick={()=>removeTask(t)}>
-                        <Icon.Trash/>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {tasks.length===0 && <tr><td className="p-4 text-center text-muted-foreground" colSpan={5}>Задач нет</td></tr>}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <div className="flex items-center gap-2 mb-2">
+            <input
+              className="rounded-xl border px-3 py-2 text-sm w-full md:w-1/2"
+              placeholder="Новая задача…"
+              value={newTask.title}
+              onChange={(e)=>setNewTask(t=>({...t,title:e.target.value}))}
+            />
+            <select
+              className="rounded-xl border px-3 py-2 text-sm"
+              value={newTask.status}
+              onChange={(e)=>setNewTask(t=>({...t,status:e.target.value as any}))}
+            >
+              <option value="new">Новая</option>
+              <option value="in_progress">В работе</option>
+              <option value="done">Готово</option>
+            </select>
+            <button className="rounded-xl border px-3 py-2 text-sm" onClick={createTask}>+ Добавить</button>
+          </div>
+
+          <div className="rounded-2xl border overflow-auto">
+            <table className="w-full text-sm zebra">
+              <thead className="bg-muted/50 sticky top-0">
+                <tr><th className="p-2 text-left">№</th><th className="p-2 text-left">Название</th><th className="p-2 text-left">Статус</th><th className="p-2 text-left">Обновлено</th><th className="p-2 text-left w-24"></th></tr>
+              </thead>
+              <tbody>
+                {tasks.map((t,i)=>(
+                  <tr key={t._id} className="border-t">
+                    <td className="p-2 align-top">{i+1}</td>
+                    <td className="p-2 align-top">{t.title||"(без названия)"}</td>
+                    <td className="p-2 align-top">{t.status||""}</td>
+                    <td className="p-2 align-top">{formatDateTimeRu(t.updatedAt)}</td>
+                    <td className="p-2">
+                      <div className="flex gap-2">
+                        <button className={iconBtn} title={t.archived?"Убрать из архива":"В архив"} aria-label={t.archived?"Убрать из архива":"В архив"} onClick={()=>toggleTaskArchive(t)}>
+                          {t.archived?<Icon.Unarchive/>:<Icon.Archive/>}
+                        </button>
+                        <button className={`${iconBtn} border-red-200 hover:bg-red-50 text-red-600`} title="Удалить" aria-label="Удалить" onClick={()=>removeTask(t)}>
+                          <Icon.Trash/>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {tasks.length===0 && <tr><td className="p-4 text-center text-muted-foreground" colSpan={5}>Задач нет</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {tab === "access" && (
@@ -323,6 +376,8 @@ export default function ProjectViewPage({ projectId, onBack }:{ projectId:string
         </div>
       )}
 
+      {tab === "worklog" && <WorkLogInline projectId={projectId} />}
+      {tab === "specs" && <SpecsTab projectId={projectId} />}
       {/* ===== модал геолокации ===== */}
       {geoOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center">
@@ -407,6 +462,264 @@ export default function ProjectViewPage({ projectId, onBack }:{ projectId:string
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function WorkLogInline({ projectId }: { projectId: string }) {
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [newWork, setNewWork] = useState("");
+  const [works, setWorks] = useState<any[]>([]);
+  const [reports, setReports] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [daysWithWorks, setDaysWithWorks] = useState<string[]>([]);
+  const [daysWithReports, setDaysWithReports] = useState<string[]>([]);
+  const [calOpen, setCalOpen] = useState(false);
+  // ---- helpers: YYYY-MM-DD, конец дня, человекочитаемая дата ----
+  const ymd = (d: Date) => {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  };
+  const ymdEnd = (d: Date) => `${ymd(d)}T23:59:59`; // важный фикс для отчётов
+  const dateStr = ymd(selectedDate);
+  const human = dateStr.split("-").reverse().join(".");
+
+  // ---- загрузки ----
+  async function load() {
+    setLoading(true);
+    try {
+      const [w, r] = await Promise.all([
+        api<{ items: any[] }>(`/api/projects/${projectId}/worklog?date=${dateStr}`),
+        // ВАЖНО: до конца дня, иначе отчёты не попадали в фильтр
+        api<{ items: any[] }>(
+          `/api/reports?projectId=${projectId}` +
+          `&startFrom=${dateStr}&startTo=${encodeURIComponent(ymdEnd(selectedDate))}` +
+          `&archived=0&limit=2000&page=1&sort=-start_time`
+        ),
+      ]);
+      setWorks(Array.isArray(w.items) ? w.items : []);
+      setReports(Array.isArray(r.items) ? r.items : []);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadMarkedDays(month: Date) {
+    const from = new Date(month.getFullYear(), month.getMonth(), 1);
+    const to   = new Date(month.getFullYear(), month.getMonth() + 1, 0);
+
+    const w = await api<{dates:string[]}>(`/api/projects/${projectId}/worklog/dates?from=${ymd(from)}&to=${ymd(to)}`);
+    setDaysWithWorks(Array.isArray(w?.dates) ? w.dates : []);
+
+    const r = await api<{items:any[]}>(`/api/reports?projectId=${projectId}&startFrom=${ymd(from)}&startTo=${ymd(to)}T23:59:59&archived=0&limit=2000&page=1&sort=-start_time`);
+    const repDates = new Set<string>();
+    (Array.isArray(r?.items) ? r.items : []).forEach((it:any)=>{
+      const d = (it.start_time || it.date || it.createdAt);
+      if (!d) return;
+      const ds = (typeof d === "string" ? d : new Date(d).toISOString()).slice(0,10);
+      repDates.add(ds);
+    });
+    setDaysWithReports(Array.from(repDates));
+  }
+
+  useEffect(() => { load(); }, [projectId, dateStr]);
+  useEffect(() => { loadMarkedDays(selectedDate); }, [projectId, selectedDate]);
+
+  // ---- CRUD ----
+  async function addWork() {
+    const text = newWork.trim();
+    if (!text) return;
+    const res = await api<{ item: any }>(`/api/projects/${projectId}/worklog`, {
+      method: "POST",
+      body: JSON.stringify({ text, date: dateStr }),
+    });
+    setNewWork("");
+    const item = (res as any)?.item || res; // на случай другого ответа
+    setWorks((prev) => (item ? [item, ...prev] : prev));
+    if (!daysWithWorks.includes(dateStr)) setDaysWithWorks((d) => [...d, dateStr]);
+  }
+
+  async function removeWork(id: string) {
+    await api(`/api/projects/${projectId}/worklog/${id}`, { method: "DELETE" });
+    setWorks((prev) => prev.filter((x) => String(x._id) !== String(id)));
+    // если всё удалили — обновим «зелёные кружки» и список на день
+    setTimeout(() => {
+      load();
+      loadMarkedDays(selectedDate);
+    }, 0);
+  }
+
+  // ---- модификаторы для DayPicker: выделяем дни с работами ----
+  const hasWork   = (day: Date) => daysWithWorks.includes(ymd(day));
+  const hasReport = (day: Date) => daysWithReports.includes(ymd(day));
+  const hasBoth   = (day: Date) => hasWork(day) && hasReport(day);
+
+  const modifiers = { hasWork, hasReport, hasBoth };
+
+  // Кольца — тонкие и не увеличивают круг
+  const modifiersStyles: any = {
+    hasWork:   { boxShadow: "inset 0 0 0 1.5px #16a34a", borderRadius: "9999px" },
+    hasReport: { boxShadow: "inset 0 0 0 1.5px #f59e0b", borderRadius: "9999px" },
+    hasBoth:   { boxShadow: "inset 0 0 0 1.5px #16a34a, inset 0 0 0 3px #f59e0b", borderRadius: "9999px" },
+  };
+
+  // Уменьшаем размер ячеек и настраиваем выбранный день
+  const dayPickerStyles: any = {
+    root: {
+      // компактнее календарь
+      ["--rdp-cell-size" as any]: "24px",
+    },
+    day: { borderRadius: "9999px" },
+    day_selected: {
+      // вместо заливки — тонкое синее кольцо
+      background: "transparent",
+      color: "inherit",
+      boxShadow: "inset 0 0 0 2px #2563eb",
+    },
+  };
+
+  // ---- поповер календаря через fixed-портал, чтобы страница не «прыгала» ----
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  const [calStyle, setCalStyle] = useState<React.CSSProperties>({ position: "fixed", top: -9999, left: -9999, zIndex: 60 });
+
+  useEffect(() => {
+    if (!calOpen || !anchorEl) return;
+    const r = anchorEl.getBoundingClientRect();
+    setCalStyle({
+      position: "fixed",
+      top: r.bottom + 6,
+      left: r.left,
+      zIndex: 60,
+      maxHeight: "70vh",
+    });
+  }, [calOpen, anchorEl]);
+
+  useEffect(() => {
+    if (!calOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const pnl = document.getElementById("wl-calendar-panel");
+      if (!pnl) return;
+      if (pnl.contains(e.target as Node)) return;
+      if (anchorEl && anchorEl.contains(e.target as Node)) return;
+      setCalOpen(false);
+    };
+    window.addEventListener("pointerdown", onDown, true);
+    return () => window.removeEventListener("pointerdown", onDown, true);
+  }, [calOpen, anchorEl]);
+
+  return (
+    <div className="space-y-3">
+      {/* кнопка + дата */}
+      <div className="relative inline-block">
+        <button
+          ref={setAnchorEl as any}
+          className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm hover:bg-muted/40"
+          type="button"
+          onClick={() => setCalOpen((v) => !v)}
+        >
+          {/* твой SVG-икон календаря */}
+          <Icon.Calendar />
+          {human}
+        </button>
+        {loading && <span className="ml-2 text-sm opacity-70">Загрузка…</span>}
+      </div>
+
+      {/* две карточки вразворот с теми же рамками, что и остальной UI */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Левая — выполненные работы */}
+        <div className="rounded-2xl border overflow-hidden">
+          <div className="bg-muted/50 px-3 py-2 text-sm font-medium">
+            Выполненные работы ({human})
+          </div>
+
+          <div className="p-3 border-b">
+            <textarea
+              className="w-full rounded-xl border px-3 py-2 text-sm"
+              rows={4}
+              placeholder="Что сделано?…"
+              value={newWork}
+              onChange={(e) => setNewWork(e.target.value)}
+            />
+            <div className="mt-2 text-right">
+              <button
+                className="rounded-xl border px-3 py-2 text-sm hover:bg-muted/50"
+                onClick={addWork}
+              >
+                Добавить запись
+              </button>
+            </div>
+          </div>
+
+          <div className="max-h-[40vh] overflow-y-auto">
+            {works.length === 0 && (
+              <div className="p-3 text-sm opacity-70">Пока нет записей.</div>
+            )}
+            {works.map((w) => (
+              <div key={String(w._id)} className="border-b px-3 py-2">
+                <div className="text-sm whitespace-pre-wrap">{w.text}</div>
+                <div className="mt-1 flex items-center justify-between text-xs opacity-70">
+                  <span>{w.authorName || "—"}</span>
+                  <button
+                    className="hover:underline"
+                    onClick={() => removeWork(String(w._id))}
+                  >
+                    удалить
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Правая — отчёты сотрудников */}
+        <div className="rounded-2xl border overflow-hidden">
+          <div className="bg-muted/50 px-3 py-2 text-sm font-medium">
+            Отчёты сотрудников (за день)
+          </div>
+
+          <div className="max-h-[55vh] overflow-y-auto">
+            {reports.length === 0 && (
+              <div className="p-3 text-sm opacity-70">Отчётов нет.</div>
+            )}
+            {reports.map((r: any) => (
+              <div key={String(r._id)} className="border-b px-3 py-2">
+                <div className="text-sm font-medium">
+                  {r.person?.name || "Сотрудник"}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {r.project?.name || ""}
+                </div>
+                <div className="text-sm whitespace-pre-wrap mt-1">
+                  {r.text_report || ""}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Календарь в портале (fixed), чтобы не раздвигал страницу */}
+      {calOpen &&
+        createPortal(
+          <div id="wl-calendar-panel" style={calStyle} className="rounded-2xl border bg-white p-2 shadow-xl">
+            <DayPicker
+              mode="single"
+              selected={selectedDate}
+              onSelect={(d) => {
+                if (d) setSelectedDate(d);
+                setCalOpen(false);
+              }}
+              onMonthChange={(d) => loadMarkedDays(d)}
+              weekStartsOn={1}
+              modifiers={modifiers}
+              modifiersStyles={modifiersStyles}
+              styles={dayPickerStyles}
+            />
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
