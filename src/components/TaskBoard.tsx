@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api";
-import { Projects } from "../lib/api"; // из обновлённого api.ts
+import { Projects } from "../lib/api";
 import { formatDateTimeRu } from "../lib/dates";
 
 type Task = {
@@ -9,7 +9,7 @@ type Task = {
   status?: string;
   updatedAt?: string;
   archived?: boolean;
-  projectId?: string; //  добавили
+  projectId?: string;
   extra?: any;
 };
 
@@ -86,7 +86,6 @@ export default function TaskBoard() {
 
   //  смена проекта у задачи
   async function changeTaskProject(id: string, projectId: string) {
-    // если выбрано «Без проекта» — отправляем пустую строку; бэкенд сам проставит системный
     const body: any = projectId ? { projectId } : { projectId: "" };
     await api(`/api/task/${id}`, { method: "PATCH", body: JSON.stringify(body) });
     setTasks(ts => ts.map(t =>
@@ -99,7 +98,6 @@ export default function TaskBoard() {
     const byText = (t: Task) => (t.title || "").toLowerCase().includes(q.toLowerCase());
     const byProject = (t: Task) => {
       if (!filterProject) return true;
-      // если фильтруем «Без проекта» — учитываем системный id
       if (filterProject === "__none") {
         return !t.projectId || (sysProjectId && t.projectId === sysProjectId);
       }
@@ -123,7 +121,7 @@ export default function TaskBoard() {
 
   function guardDragStart(e: React.DragEvent<HTMLDivElement>, id: string) {
     const target = e.target as HTMLElement | null;
-    if (target && target.closest("button, select")) { // не начинать drag с кнопок/селекта
+    if (target && target.closest("button, select")) {
       e.preventDefault();
       return;
     }
@@ -141,7 +139,7 @@ export default function TaskBoard() {
         />
         <button className="rounded-xl border px-3 py-2" onClick={load}>Обновить</button>
 
-        {/*  фильтр по проекту */}
+        {/* фильтр по проекту */}
         <div className="ml-2 flex items-center gap-2">
           <div className="text-sm text-muted-foreground">Проект:</div>
           <select
@@ -168,7 +166,6 @@ export default function TaskBoard() {
         </div>
       </div>
 
-      {/* ограничиваем ширину страницы и оставляем скролл только внутри ленты */}
       <div className="relative overflow-x-hidden max-w-full">
         <button
           className="absolute left-0 top-1/2 -translate-y-1/2 z-10 rounded-full border px-3 py-2 bg-background/80 backdrop-blur"
@@ -201,7 +198,6 @@ export default function TaskBoard() {
                   const next = statuses.filter(s => s.key !== col.key);
                   setStatuses(next); saveStatuses(next);
                 }}
-                //  прокидываем проекты и обработчик смены
                 projects={projects}
                 sysProjectId={sysProjectId}
                 onChangeProject={changeTaskProject}
@@ -244,7 +240,6 @@ function Column({
       </div>
       <div className="space-y-2">
         {items.map(t => {
-          // текущее значение селекта проекта:
           const value = !t.projectId || (sysProjectId && t.projectId === sysProjectId) ? "" : (t.projectId || "");
           return (
             <div key={t._id}

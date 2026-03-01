@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Reports, api, downloadReportsXlsx } from "../lib/api";
 
-/* ================= helpers ================= */
+/* хелперы */
 
 type Tab = "all" | "arch";
 type Person = {
@@ -47,8 +47,6 @@ function toInputDT(iso: string | Date | null | undefined) {
   return `${yyyy}-${mm}-${dd}T${HH}:${MM}`;
 }
 
-// Из значения datetime-local делаем ISO-строку с Z (UTC) без сдвигов.
-// Было "2025-10-14T08:06" -> станет "2025-10-14T08:06:00Z".
 function inputToIsoUTC(v: string): string | null {
   if (!v) return null;
   const [datePart, timePart] = v.split("T");
@@ -56,7 +54,7 @@ function inputToIsoUTC(v: string): string | null {
   return `${datePart}T${timePart}:00Z`;
 }
 
-// Блок даты/времени: форматируем по UTC-компонентам, без сдвигов.
+// Блок даты/времени:
 function fmtDateBlock(start?: string, end?: string) {
   if (!start) return "-";
   const s = new Date(start);
@@ -78,7 +76,7 @@ function fmtDateBlock(start?: string, end?: string) {
   }
   return `${dd}.${mm}.${yyyy}\n${sH}:${sM}-${second}`;
 }
-/** Длительность — считаем в UTC (разницы одинаковы в любой тайзоне) */
+
 function fmtDuration(start?: string, end?: string) {
   if (!start || !end) return "-";
   const s = new Date(start).getTime();
@@ -90,7 +88,7 @@ function fmtDuration(start?: string, end?: string) {
   return `${h}:${String(m).padStart(2, "0")}`;
 }
 
-/* ================= SVG icons (inline, Linux-friendly) ================= */
+/* иконки */
 const Icon = {
   Pencil: (p: any) => (
     <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden {...p}>
@@ -122,9 +120,32 @@ const Icon = {
       <path fill="currentColor" d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/>
     </svg>
   ),
+  Log: (p: any) => (
+    <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden {...p}>
+      <path fill="currentColor" d="M6 4h11a1 1 0 011 1v14H6a2 2 0 01-2-2V6a2 2 0 012-2zm1 4h9v2H7V8zm0 4h9v2H7v-2zm0 4h5v2H7v-2z"/>
+    </svg>
+  ),
 };
 
-/* =================== Stable Popover (portal + fixed) =================== */
+const WEEKDAYS_RU_UI = [
+  "Воскресенье",
+  "Понедельник",
+  "Вторник",
+  "Среда",
+  "Четверг",
+  "Пятница",
+  "Суббота",
+];
+
+function fmtWeekday(start?: string) {
+  if (!start) return "-";
+  const d = new Date(start);
+  if (Number.isNaN(d.getTime())) return "-";
+  const idx = d.getUTCDay(); // 0..6
+  return WEEKDAYS_RU_UI[idx] || "-";
+}
+
+/* поповер */
 
 function usePosition(anchor: HTMLElement | null, align: "start" | "center" | "end") {
   const [style, setStyle] = useState<React.CSSProperties>({ position: "fixed", top: -9999, left: -9999 });
@@ -207,7 +228,7 @@ function PopoverPortal({
   );
 }
 
-/* ================= Edit modal ================= */
+/* модалка */
 
 function EditModal({
   report,
@@ -234,7 +255,7 @@ function EditModal({
     return (localStorage.getItem(LS_ONLY_ACTIVE_PROJECTS) ?? "1") !== "0";
   });
 
-  // загрузка справочников с учётом переключателя
+  // загрузка справочников
   async function loadPersonsEM(onlyActive: boolean) {
     try {
       if (onlyActive) {
@@ -242,7 +263,7 @@ function EditModal({
         setPersons((r?.items || r || []) as Person[]);
         return;
       }
-      // нужны и активные, и архивные
+      // активные и архивные
       const [a0, a1] = await Promise.all([
         api("/api/person?archived=0&limit=2000"),
         api("/api/person?archived=1&limit=2000"),
@@ -289,10 +310,8 @@ function EditModal({
   useEffect(() => {
     loadPersonsEM(onlyActivePersonsEM);
     loadProjectsEM(onlyActiveProjectsEM);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // реагируем на переключатели
   useEffect(() => {
     localStorage.setItem(LS_ONLY_ACTIVE_PERSONS, onlyActivePersonsEM ? "1" : "0");
     loadPersonsEM(onlyActivePersonsEM);
@@ -306,8 +325,7 @@ function EditModal({
   const [form, setForm] = useState(() => ({
     personId: report.person?.id || report.person_id || report.user_id || "",
     projectId: report.project?.id || report.project_id || "",
-    // ВАЖНО: если новый отчёт — показываем ТЕКУЩЕЕ МСК-время, не уезжая на +3ч
-    start_time: toInputDT(report.start_time || new Date()), // показываем как есть (UTC)
+    start_time: toInputDT(report.start_time || new Date()),
     end_time: toInputDT(report.end_time),
     text_report: report.text_report || "",
     photo_link: report.photo_link || "",
@@ -325,7 +343,7 @@ function EditModal({
         const r1 = await api("/api/person?archived=0&limit=2000");
         setPersons((r1?.items || r1 || []) as Person[]);
       } catch {
-        // фолбэк, если /api/person недоступен
+        // фолбэк если /api/person недоступен
         const r2 = await api("/api/users?archived=0");
         setPersons((r2?.items || r2 || []) as Person[]);
       }
@@ -367,7 +385,7 @@ function EditModal({
         await Reports.create(payload);
       } else {
         if (currStartStr !== origStartStr) {
-          payload.start_time = isoStartUTC; // может быть null — очистим поле
+          payload.start_time = isoStartUTC; // null - очистим поле
         }
         if (currEndStr !== origEndStr) {
           payload.end_time = isoEndUTC;
@@ -397,10 +415,13 @@ function EditModal({
               onChange={(e) => set("personId", e.target.value)}
             >
               <option value="">- не выбран -</option>
-              {(onlyActivePersonsEM ? persons.filter((p: any) => !p?.archived) : persons).map((p) => (
-                <option key={idOf(p)} value={idOf(p)}>
-                  {(displayName(p) || (p as any).email || idOf(p)) + ((p as any)?.archived ? " (архив)" : "")}
-                </option>
+              {(onlyActivePersonsEM ? persons.filter((p: any) => !p?.archived) : persons)
+                .slice()
+                .sort((a, b) => displayName(a).localeCompare(displayName(b), "ru"))
+                .map((p) => (
+                  <option key={idOf(p)} value={idOf(p)}>
+                    {(displayName(p) || (p as any).email || idOf(p)) + ((p as any)?.archived ? " (архив)" : "")}
+                  </option>
               ))}
             </select>
 
@@ -431,10 +452,17 @@ function EditModal({
               onChange={(e) => set("projectId", e.target.value)}
             >
               <option value="">- не выбран -</option>
-              {(onlyActiveProjectsEM ? projects.filter((p: any) => !p?.archived) : projects).map((p) => (
-                <option key={idOf(p)} value={idOf(p)}>
-                  {((p as any).name || idOf(p)) + ((p as any)?.archived ? " (архив)" : "")}
-                </option>
+              {(onlyActiveProjectsEM ? projects.filter((p: any) => !p?.archived) : projects)
+                .slice()
+                .sort((a, b) => {
+                  const an = String((a as any).name || idOf(a) || "");
+                  const bn = String((b as any).name || idOf(b) || "");
+                  return an.localeCompare(bn, "ru");
+                })
+                .map((p) => (
+                  <option key={idOf(p)} value={idOf(p)}>
+                    {((p as any).name || idOf(p)) + ((p as any)?.archived ? " (архив)" : "")}
+                  </option>
               ))}
             </select>
 
@@ -514,8 +542,6 @@ function EditModal({
     </div>
   );
 }
-
-/* ============== Column resize util (Excel-like) ============== */
 
 type WidthMap = Record<string, number>;
 const WKEY = "ui.reports.colwidths";
@@ -611,14 +637,13 @@ function useResizableColumns(ids: string[], defaults: WidthMap = {}) {
   return { styleFor, Resizer };
 }
 
-/* ============== column visibility (gear) ============== */
-
-type ColId = "tg" | "person" | "project" | "dt" | "hours" | "text" | "photo" | "actions";
+type ColId = "tg" | "person" | "project" | "dt" | "weekday" | "hours" | "text" | "photo" | "actions";
 const COL_DEFS: { id: ColId; label: string; default: boolean }[] = [
   { id: "tg", label: "Telegram ID", default: true },
   { id: "person", label: "Сотрудник", default: true },
   { id: "project", label: "Проект", default: true },
   { id: "dt", label: "Дата / время", default: true },
+  { id: "weekday", label: "День недели", default: true },
   { id: "hours", label: "Часы", default: true },
   { id: "text", label: "Текст", default: true },
   { id: "photo", label: "Фото", default: true },
@@ -627,7 +652,7 @@ const COL_DEFS: { id: ColId; label: string; default: boolean }[] = [
 const COLS_ORDER: ColId[] = COL_DEFS.map((c) => c.id);
 const LS_COLS = "ui.reports.visiblecols";
 
-/* ================= Page ================= */
+/* страница */
 
 export default function ReportsPage() {
   const lsKey = "ui.search.reports";
@@ -639,7 +664,7 @@ export default function ReportsPage() {
     archived: 0 as 0 | 1,
     q: localStorage.getItem(lsKey) || "",
   });
-  const ACTION_W = React.useMemo(() => (q.archived === 0 ? 72 : 48), [q.archived]);
+  const ACTION_W = React.useMemo(() => 104, [q.archived]);
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
@@ -667,14 +692,15 @@ export default function ReportsPage() {
   }, [visibleCols]);
   const VCOLS = COLS_ORDER.filter((id) => visibleCols.includes(id));
   const { styleFor, Resizer } = useResizableColumns(COLS_ORDER, {
-    tg: 140,
-    person: 180,
-    project: 220,
-    dt: 190,
-    hours: 90,
-    text: 420,
-    photo: 120,
-    actions: 72,
+    tg: 120,
+    person: 160,
+    project: 200,
+    dt: 160,
+    weekday: 120,
+    hours: 80,
+    text: 360,
+    photo: 100,
+    actions: 104,
   });
 
   // Справочники для фильтров
@@ -702,7 +728,6 @@ export default function ReportsPage() {
       for (const p of items) byId.set(String((p as any)?._id || (p as any)?.id || ""), p);
       setPersons([...byId.values()]);
     } catch {
-      // fallback на /api/users
       const myId2 = ++personsReqIdRef.current;
       const [u0, u1] = await Promise.all([
         api("/api/users?archived=0"),
@@ -735,39 +760,50 @@ export default function ReportsPage() {
     setProjects([...byId.values()]);
   }
 
-  // первичная загрузка
   useEffect(() => {
     loadPersons(onlyActivePersons);
     loadProjects(onlyActiveProjects);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // переключатель "только активные" — сотрудники
+  // переключатель "только активные" - сотрудники
   useEffect(() => {
     localStorage.setItem(LS_ONLY_ACTIVE_PERSONS, onlyActivePersons ? "1" : "0");
     loadPersons(onlyActivePersons);
   }, [onlyActivePersons]);
 
-  // переключатель "только активные" — проекты
+  // переключатель "только активные" - проекты
   useEffect(() => {
     localStorage.setItem(LS_ONLY_ACTIVE_PROJECTS, onlyActiveProjects ? "1" : "0");
     loadProjects(onlyActiveProjects);
   }, [onlyActiveProjects]);
 
-  // фильтры (локальные + серверные)
+  // лог отчёта
+  const [logModal, setLogModal] = useState<{
+    open: boolean;
+    log: string;
+    reportId: string | null;
+    duration?: string;
+  }>({
+    open: false,
+    log: "",
+    reportId: null,
+    duration: undefined,
+  });
+
+  // фильтры
   const [filters, setFilters] = useState({
     tg: "",
     personId: "",
     projectId: "",
     dateFrom: "",
     dateTo: "",
+    weekday: "",
     hoursMin: "",
     hoursMax: "",
     textContains: "",
-    photo: "", // "", "yes", "no"
+    photo: "",
   });
 
-  // popover state (id + anchor)
   const [popover, setPopover] = useState<{ id: string; anchor: HTMLElement | null } | null>(null);
 
   useEffect(() => {
@@ -795,7 +831,6 @@ export default function ReportsPage() {
   }
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q.page, q.limit, q.archived, q.sort, q.q, filters.personId, filters.projectId, filters.textContains]);
 
   async function toArchive(r: any) {
@@ -812,7 +847,7 @@ export default function ReportsPage() {
     load();
   }
 
-  /* ===== локальная фильтрация ===== */
+  /* локальная фильтрация */
   const filteredItems = useMemo(() => {
     const f = filters;
     const inRange = (d?: string) =>
@@ -820,9 +855,17 @@ export default function ReportsPage() {
       (!f.dateTo || (d && new Date(d) <= new Date(f.dateTo + "T23:59:59")));
     const hoursOk = (s?: string, e?: string) => {
       if (!f.hoursMin && !f.hoursMax) return true;
-      if (!s || !e) return false;
-      const mins = (new Date(e).getTime() - new Date(s).getTime()) / 60000;
+
+      if (!s) return false;
+
+      const startMs = new Date(s).getTime();
+      const endMs = e ? new Date(e).getTime() : startMs;
+
+      if (isNaN(startMs) || isNaN(endMs) || endMs < startMs) return false;
+
+      const mins = (endMs - startMs) / 60000;
       const h = mins / 60;
+
       const min = f.hoursMin ? parseFloat(f.hoursMin) : -Infinity;
       const max = f.hoursMax ? parseFloat(f.hoursMax) : +Infinity;
       return h >= min && h <= max;
@@ -833,6 +876,11 @@ export default function ReportsPage() {
       if (f.photo === "no" && r.photo_link) return false;
       if (!inRange(r.start_time)) return false;
       if (!hoursOk(r.start_time, r.end_time)) return false;
+
+      if (f.weekday) {
+        const wd = fmtWeekday(r.start_time);
+        if (wd !== f.weekday) return false;
+      }
       return true;
     });
   }, [items, filters]);
@@ -843,7 +891,6 @@ export default function ReportsPage() {
     const base = "p-2 text-left relative border-b " + (id === "actions" ? "" : "border-r");
     const popId = `f-${id}`;
 
-    // ref не нужен: используем currentTarget из onClick для якоря
     return (
       <th key={id} className={base} data-col={id}>
         <div className="flex items-center gap-2">
@@ -852,7 +899,7 @@ export default function ReportsPage() {
             <button
               data-popover
               className="rounded-md border px-1.5 py-1 text-xs hover:bg-muted/60"
-              onMouseDown={(e) => e.preventDefault()} // важно!
+              onMouseDown={(e) => e.preventDefault()}
               onClick={(e) => {
                 e.stopPropagation();
                 const anchor = e.currentTarget as HTMLElement;
@@ -913,6 +960,10 @@ export default function ReportsPage() {
         const personList = onlyActivePersons
           ? persons.filter((p: any) => !p?.archived)
           : persons;
+        const sortedPersonList = personList
+          .slice()
+          .sort((a, b) => displayName(a).localeCompare(displayName(b), "ru"));
+
         return (
           <div className="w-full">
             <label className="text-sm w-full block">
@@ -923,7 +974,7 @@ export default function ReportsPage() {
                 onChange={(e) => setFilters((f) => ({ ...f, personId: e.target.value }))}
               >
                 <option value="">— все —</option>
-                {personList.map((p) => {
+                {sortedPersonList.map((p) => {
                   const archivedFlag = (p as any)?.archived ? " (архив)" : "";
                   const name = displayName(p) || (p as any).email || idOf(p);
                   return (
@@ -949,6 +1000,14 @@ export default function ReportsPage() {
         const projectList = onlyActiveProjects
           ? projects.filter((p: any) => !p?.archived)
           : projects;
+        const sortedProjectList = projectList
+          .slice()
+          .sort((a, b) => {
+            const an = String((a as any).name || idOf(a) || "");
+            const bn = String((b as any).name || idOf(b) || "");
+            return an.localeCompare(bn, "ru");
+          });
+
         return (
           <div className="w-full">
             <label className="text-sm w-full block">
@@ -959,7 +1018,7 @@ export default function ReportsPage() {
                 onChange={(e) => setFilters((f) => ({ ...f, projectId: e.target.value }))}
               >
                 <option value="">— все —</option>
-                {projectList.map((p) => {
+                {sortedProjectList.map((p) => {
                   const archivedFlag = (p as any)?.archived ? " (архив)" : "";
                   const label = (p as any).name || idOf(p);
                   return (
@@ -1004,6 +1063,36 @@ export default function ReportsPage() {
             </label>
           </div>
         );
+      case "weekday":
+        const weekdays = [
+          "Понедельник",
+          "Вторник",
+          "Среда",
+          "Четверг",
+          "Пятница",
+          "Суббота",
+          "Воскресенье",
+        ];
+        return (
+          <label className="text-sm w-full">
+            День недели
+            <select
+              className="mt-1 w-full rounded-lg border px-2 py-1"
+              value={filters.weekday}
+              onChange={(e) =>
+                setFilters((f) => ({ ...f, weekday: e.target.value }))
+              }
+            >
+              <option value="">— все —</option>
+              {weekdays.map((w) => (
+                <option key={w} value={w}>
+                  {w}
+                </option>
+              ))}
+            </select>
+          </label>
+        );
+
       case "hours":
         return (
           <div className="grid grid-cols-2 gap-2 text-sm">
@@ -1066,6 +1155,7 @@ export default function ReportsPage() {
       if (id === "person") base.personId = "";
       if (id === "project") base.projectId = "";
       if (id === "dt") (base.dateFrom = ""), (base.dateTo = "");
+      if (id === "weekday") base.weekday = "";
       if (id === "hours") (base.hoursMin = ""), (base.hoursMax = "");
       if (id === "text") base.textContains = "";
       if (id === "photo") base.photo = "";
@@ -1073,7 +1163,7 @@ export default function ReportsPage() {
     });
   }
 
-  const actionBtn = (title: string, onClick: (e: React.MouseEvent) => void, variant: "edit" | "archive" | "unarchive" | "del") => (
+  const actionBtn = (title: string, onClick: (e: React.MouseEvent) => void, variant: "edit" | "archive" | "unarchive" | "del" | "log") => (
     <button
       className={`inline-flex items-center justify-center rounded-md border w-7 h-7 ${
         variant === "del" ? "text-red-600 border-red-200 hover:bg-red-50" : "hover:bg-muted/50"
@@ -1086,6 +1176,7 @@ export default function ReportsPage() {
       {variant === "archive" && <Icon.Archive />}
       {variant === "unarchive" && <Icon.Unarchive />}
       {variant === "del" && <Icon.Trash />}
+      {variant === "log" && <Icon.Log />}
     </button>
   );
 
@@ -1094,11 +1185,13 @@ export default function ReportsPage() {
       case "tg":
         return <td key={id} className="p-2 whitespace-nowrap" data-col="tg">{r.person?.telegram_id || "-"}</td>;
       case "person":
-        return <td key={id} className="p-2 whitespace-nowrap" data-col="person">{displayName(r.person) || "-"}</td>;
+        return <td key={id} className="p-2 break-words" data-col="person">{displayName(r.person) || "-"}</td>;
       case "project":
-        return <td key={id} className="p-2 whitespace-nowrap" data-col="project">{r.project?.name || "-"}</td>;
+        return <td key={id} className="p-2 break-words" data-col="project">{r.project?.name || "-"}</td>;
       case "dt":
         return <td key={id} className="p-2 whitespace-pre" data-col="dt">{fmtDateBlock(r.start_time, r.end_time)}</td>;
+      case "weekday":
+        return <td key={id} className="p-2 whitespace-nowrap" data-col="weekday">{fmtWeekday(r.start_time)}</td>;
       case "hours":
         return <td key={id} className="p-2 whitespace-nowrap" data-col="hours">{fmtDuration(r.start_time, r.end_time)}</td>;
       case "text":
@@ -1125,6 +1218,13 @@ export default function ReportsPage() {
         return (
           <td key={id} className="p-2" data-col="actions">
             <div className="flex gap-1 justify-end">
+              {actionBtn("Посмотреть лог", (e) => { e.stopPropagation(); setLogModal({
+                open: true,
+                log: r.session_log || "Лог действий пуст",
+                reportId: r._id,
+                duration: r.session_duration_str,});
+                }, "log"
+              )}
               {actionBtn("Редактировать", (e) => { e.stopPropagation(); setEditing(r); }, "edit")}
               {q.archived === 0
                 ? actionBtn("В архив", (e) => { e.stopPropagation(); toArchive(r); }, "archive")
@@ -1229,7 +1329,7 @@ export default function ReportsPage() {
         </table>
       </div>
 
-      {/* модалка выбора полей */}
+      {/* модалка */}
       {colsOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => setColsOpen(false)} />
@@ -1268,6 +1368,49 @@ export default function ReportsPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {logModal.open && (
+        <div className="fixed inset-0 z-50 grid place-items-center">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() =>
+              setLogModal({ open: false, log: "", reportId: null, duration: undefined })
+            }
+          />
+          <div className="relative w-[min(720px,96vw)] max-h-[80vh] rounded-2xl bg-white p-5 shadow-2xl flex flex-col">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div>
+                <div className="text-lg font-semibold">Лог сессии</div>
+                {logModal.duration && (
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    Длительность: {logModal.duration}
+                  </div>
+                )}
+              </div>
+              <button
+                className="inline-flex items-center justify-center rounded-md border w-7 h-7 hover:bg-muted/50"
+                onClick={() =>
+                  setLogModal({ open: false, log: "", reportId: null, duration: undefined })
+                }
+                title="Закрыть"
+              >
+                <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden>
+                  <path
+                    fill="currentColor"
+                    d="M6 6l12 12M18 6L6 18"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+            </div>
+            <pre className="flex-1 overflow-auto whitespace-pre-wrap break-words text-sm font-mono border rounded-xl p-3 bg-muted/30">
+              {logModal.log || "Лог действий пуст"}
+            </pre>
           </div>
         </div>
       )}

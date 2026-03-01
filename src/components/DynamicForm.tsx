@@ -37,7 +37,7 @@ export default function DynamicForm({
   const [defs, setDefs] = useState<FieldDef[]>([]);
   const [persons, setPersons] = useState<Person[]>([]);
 
-  // грузим схемы полей
+  // схемы полей
   useEffect(() => {
     (async () => {
       try {
@@ -52,7 +52,7 @@ export default function DynamicForm({
     })();
   }, [entity]);
 
-  // список сотрудников — нужен для responsible_id
+  // список сотрудников для responsible_id
   useEffect(() => {
     if (entity !== "project") return;
     (async () => {
@@ -67,7 +67,6 @@ export default function DynamicForm({
   }, [entity]);
 
   const setVal = (path: string, v: any) => {
-    // поддерживаем как "плоские" поля, так и extra.*
     if (path.startsWith("extra.")) {
       const k = path.substring("extra.".length);
       onChange({ ...value, extra: { ...(value?.extra || {}), [k]: v } });
@@ -85,12 +84,11 @@ export default function DynamicForm({
     [persons]
   );
 
-  // отрисовка инпута по типу
   const renderField = (fd: FieldDef) => {
-    const labelText = fd.label; // ← БЕЗ "(key)"
-    const path = fd.key; // наши кастомные поля сохраняем на верхнем уровне, как вы просили для бота
+    const labelText = fd.label;
+    const path = fd.key;
 
-    // спец-кейс: ответственный проекта
+    // ответственный проекта
     if (entity === "project" && fd.key === "responsible_id") {
       const v = value?.responsible_id ?? value?.responsibleId ?? "";
       return (
@@ -167,7 +165,7 @@ export default function DynamicForm({
         );
 
       case "date":
-        // поддержим YYYY-MM-DD
+        // YYYY-MM-DD
         const toInputDate = (x: any) => {
           if (!x) return "";
           try {

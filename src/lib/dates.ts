@@ -1,5 +1,3 @@
-// frontend/src/lib/dates.ts
-
 function parseAsUTC(input: string | Date | null | undefined): Date | null {
   if (!input) return null;
   if (input instanceof Date) return input;
@@ -9,14 +7,14 @@ function parseAsUTC(input: string | Date | null | undefined): Date | null {
 
 const pad = (n: number) => n.toString().padStart(2, "0");
 
-/** Только дата в русском формате: dd.MM.yyyy */
+/* дата в русском формате: dd.MM.yyyy */
 export function formatDateRu(input: string | Date | null | undefined): string {
   const d = parseAsUTC(input);
   if (!d || isNaN(d.getTime())) return "";
   return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`;
 }
 
-/** Дата + время в формате: dd.MM.yyyy HH:mm (при needSeconds = true -> с секундами) */
+/* Дата + время в формате: dd.MM.yyyy HH:mm */
 export function formatDateTimeRu(
   input: string | Date | null | undefined,
   needSeconds = false

@@ -20,7 +20,7 @@
   body { @apply bg-background text-foreground; }
 }
 
-/* === мягкая зебра для таблиц + hover (видно, но не режет глаз) === */
+/* зебра для таблиц */
 @layer utilities {
   .zebra tbody tr:nth-child(odd) { @apply bg-muted/100; }
   .zebra tbody tr:nth-child(even) { @apply bg-background; }

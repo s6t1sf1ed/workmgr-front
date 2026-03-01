@@ -4,11 +4,12 @@ import { api, setToken } from "./lib/api";
 type Mode = "company" | "employee" | "login";
 
 export default function Auth({ onDone }: { onDone: () => void }) {
-  const [mode, setMode] = useState<Mode>("company");
+  // стартуем сразу в режиме логина
+  const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [company, setCompany] = useState("");
-  const [name, setName] = useState("");
+  //const [company, setCompany] = useState("");
+  //const [name, setName] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -16,9 +17,11 @@ export default function Auth({ onDone }: { onDone: () => void }) {
     try {
       setErr(null);
       setLoading(true);
+
       let path = "/auth/login";
       let body: any = { email, password };
 
+      /*  ===== регистрация временно отключена =====
       if (mode === "company") {
         path = "/auth/register-company";
         body = { email, password, company, name };
@@ -26,6 +29,7 @@ export default function Auth({ onDone }: { onDone: () => void }) {
         path = "/auth/register-employee";
         body = { email, password, company, name };
       }
+      ============================================ */
 
       const res = await api<{ access_token: string }>(path, {
         method: "POST",
@@ -46,13 +50,22 @@ export default function Auth({ onDone }: { onDone: () => void }) {
         <div className="text-2xl font-semibold text-center">Work Manager</div>
 
         <div className="flex gap-2">
-          <TabBtn active={mode === "company"} onClick={() => setMode("company")}>Регистрация компании</TabBtn>
-          <TabBtn active={mode === "employee"} onClick={() => setMode("employee")}>Регистрация</TabBtn>
-          <TabBtn active={mode === "login"} onClick={() => setMode("login")}>Логин</TabBtn>
+          {/*
+          <TabBtn active={mode === "company"} onClick={() => setMode("company")}>
+            Регистрация компании
+          </TabBtn>
+          <TabBtn active={mode === "employee"} onClick={() => setMode("employee")}>
+            Регистрация
+          </TabBtn>
+          */}
+          <TabBtn active={mode === "login"} onClick={() => setMode("login")}>
+            Логин
+          </TabBtn>
         </div>
 
         <div className="space-y-3">
-          {(mode === "company" || mode === "employee") && (
+          {/*
+          {(mode === "company" || mode === "employee") && (S
             <>
               <input
                 className="w-full rounded-xl border px-3 py-2"
@@ -68,6 +81,7 @@ export default function Auth({ onDone }: { onDone: () => void }) {
               />
             </>
           )}
+          */}
           <input
             className="w-full rounded-xl border px-3 py-2"
             placeholder="Email"
@@ -85,7 +99,7 @@ export default function Auth({ onDone }: { onDone: () => void }) {
           {err && <div className="text-red-600 text-sm">{err}</div>}
 
           <button className="w-full rounded-xl border px-3 py-2" onClick={submit} disabled={loading}>
-            {mode === "login" ? "Войти" : mode === "company" ? "Создать компанию" : "Зарегистрироваться"}
+            Войти
           </button>
         </div>
       </div>
@@ -93,8 +107,14 @@ export default function Auth({ onDone }: { onDone: () => void }) {
   );
 }
 
-function TabBtn({ active, onClick, children }:{
-  active: boolean; onClick: ()=>void; children: any;
+function TabBtn({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: any;
 }) {
   return (
     <button

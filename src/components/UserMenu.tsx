@@ -12,7 +12,6 @@ export default function UserMenu() {
   useEffect(() => {
     Me.get()
       .then((m) => {
-        // setMe(m); // ← убрать
         setName(m?.name || "");
         setTg(m?.telegram_id || "");
       })
@@ -50,7 +49,6 @@ export default function UserMenu() {
 
   return (
     <div className="flex items-center gap-3">
-      {/* даже если профиль не загрузился — всё равно даём кнопку */}
       <button className="px-3 py-1 rounded-xl border" onClick={() => setOpen(true)}>
         О пользователе
       </button>
