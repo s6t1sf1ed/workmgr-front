@@ -1,15 +1,16 @@
-import { useEffect, useState } from "react";
-import { Me } from "../lib/api";
+import type { MeInfo } from "../lib/api";
 import ThemeToggle from "./ThemeToggle";
 import UserMenu from "./UserMenu";
 
-const baseItems = [
-  { key: "projects", label: "Проекты" },
-  { key: "tasks", label: "Задачи" },
-  { key: "persons", label: "Сотрудники" },
-  { key: "timesheet", label: "Табель" },
-  { key: "fields", label: "Настройка полей" },
-  { key: "reports", label: "Отчёты" },
+const allItems = [
+  { key: "projects", label: "Проекты", perm: "projects.view" },
+  { key: "tasks", label: "Задачи", perm: "tasks.view" },
+  { key: "persons", label: "Сотрудники", perm: "persons.view" },
+  { key: "timesheet", label: "Табель", perm: "timesheet.view" },
+  { key: "fields", label: "Настройка полей", perm: "fields.view" },
+  { key: "reports", label: "Отчёты", perm: "reports.view" },
+  { key: "users_access", label: "Пользователи и доступы", perm: "users.manage" },
+  { key: "logs", label: "Логи", perm: "logs.view" },
 ];
 
 export default function Sidebar({
@@ -17,33 +18,21 @@ export default function Sidebar({
   onSelect,
   brand,
   onLogout,
+  me,
 }: {
   active: string;
   onSelect: (k: string) => void;
   brand?: string;
   onLogout: () => void;
+  me: MeInfo | null;
 }) {
-  const [role, setRole] = useState<string | null>(null);
-
-  useEffect(() => {
-    Me.get()
-      .then((m) => setRole(m.role || null))
-      .catch(() => {});
-  }, []);
-
-  const items =
-    role === "admin"
-      ? [...baseItems, { key: "logs", label: "Логи" }]
-      : baseItems;
+  const permissions = new Set(me?.permissions || []);
+  const items = allItems.filter((i) => permissions.has(i.perm));
 
   return (
     <aside className="w-64 shrink-0 border-r bg-background text-foreground flex flex-col">
-      {/* название компании */}
-      <div className="p-4 font-semibold truncate">
-        {brand || "Work Manager"}
-      </div>
+      <div className="p-4 font-semibold truncate">{brand || "Work Manager"}</div>
 
-      {/* навигация */}
       <nav className="space-y-1 p-2">
         {items.map((i) => (
           <button
@@ -58,7 +47,6 @@ export default function Sidebar({
         ))}
       </nav>
 
-      {/* низ сайдбара */}
       <div className="border-t mt-2 px-3 py-3 space-y-2">
         <div className="flex items-center justify-between gap-2">
           <UserMenu />
@@ -75,6 +63,7 @@ export default function Sidebar({
     </aside>
   );
 }
+
 
 
 

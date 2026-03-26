@@ -4,11 +4,12 @@ import EntityTable from "./components/EntityTable";
 import TaskBoard from "./components/TaskBoard";
 import Auth from "./Auth";
 import { api, setToken } from "./lib/api";
-import { Me } from "./lib/api";
+import { Me, type MeInfo } from "./lib/api";
 import ReportsPage from "./pages/ReportsPage";
 import TimesheetPage from "./pages/TimesheetPage";
 import AdminLogsPage from "./pages/AdminLogsPage";
 import ProjectViewPage from "./pages/ProjectViewPage";
+import AdminUsersPage from "./pages/AdminUsersPage";
 
 const TITLES: Record<string, string> = {
   projects: "Проекты",
@@ -18,6 +19,7 @@ const TITLES: Record<string, string> = {
   fields: "Настройка полей",
   reports: "Отчёты",
   logs: "Логи",
+  users_access: "Пользователи и доступы",
 };
 
 const LS = {
@@ -35,7 +37,8 @@ type TabKey =
   | "timesheet"
   | "fields"
   | "reports"
-  | "logs";
+  | "logs"
+  | "users_access";
 
 export default function App() {
   const [tab, setTab] = useState<TabKey>(
@@ -61,8 +64,11 @@ export default function App() {
     () => !!localStorage.getItem("token")
   );
   const [brand, setBrand] = useState<string>("");
+  const [me, setMe] = useState<MeInfo | null>(null);
 
   const [projectViewId, setProjectViewId] = useState<string | null>(null);
+
+  const [forbiddenMessage, setForbiddenMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setToken(localStorage.getItem("token"));
@@ -75,9 +81,35 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    let timer: number | undefined;
+
+    const handler = (e: Event) => {
+      const custom = e as CustomEvent<{ message?: string }>;
+      const msg = custom.detail?.message || "У вас недостаточно прав";
+
+      setForbiddenMessage(msg);
+
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        setForbiddenMessage(null);
+      }, 3000);
+    };
+
+    window.addEventListener("app:forbidden", handler as EventListener);
+
+    return () => {
+      window.removeEventListener("app:forbidden", handler as EventListener);
+      if (timer) window.clearTimeout(timer);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!authed) return;
     Me.get()
-      .then((r: any) => setBrand(r?.company?.name || r?.company || ""))
+      .then((r) => {
+        setMe(r);
+        setBrand(r?.company?.name || "");
+      })
       .catch(() => {});
   }, [authed]);
 
@@ -98,10 +130,28 @@ export default function App() {
   }, [scopeTasks]);
 
   const handleLogout = () => {
+    setMe(null);
     setToken(null);
     localStorage.removeItem("token");
     setAuthed(false);
   };
+
+  const permissions = new Set(me?.permissions || []);
+  const allowedTabs = ([
+    ["projects", "projects.view"],
+    ["tasks", "tasks.view"],
+    ["persons", "persons.view"],
+    ["timesheet", "timesheet.view"],
+    ["fields", "fields.view"],
+    ["reports", "reports.view"],
+    ["users_access", "users.manage"],
+    ["logs", "logs.view"],
+  ] as const).filter(([, perm]) => permissions.has(perm)).map(([key]) => key as TabKey);
+
+  useEffect(() => {
+    if (!allowedTabs.length) return;
+    if (!allowedTabs.includes(tab)) setTab(allowedTabs[0]);
+  }, [tab, me?.id]);
 
   if (!authed) return <Auth onDone={() => setAuthed(true)} />;
 
@@ -119,6 +169,7 @@ export default function App() {
           }}
           brand={brand}
           onLogout={handleLogout}
+          me={me}
         />
 
         <main className="flex-1 min-h-0 min-w-0 overflow-x-hidden p-6 space-y-6 max-w-none">
@@ -215,18 +266,27 @@ export default function App() {
               {/* Отчёты */}
               {tab === "reports" && <ReportsPage />}
 
+              {tab === "users_access" && <AdminUsersPage />}
+
               {/* Логи */}
               {tab === "logs" && <AdminLogsPage />}
             </>
           )}
         </main>
       </div>
+      {forbiddenMessage && (
+        <div className="fixed right-4 bottom-4 z-[1000] max-w-sm rounded-xl border border-red-200 bg-white px-4 py-3 shadow-lg">
+          <div className="text-sm font-medium text-red-600">
+            {forbiddenMessage}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function clearSearchForTab(
-  t: "projects" | "tasks" | "persons" | "timesheet" | "fields" | "reports" | "logs"
+  t: "projects" | "tasks" | "persons" | "timesheet" | "fields" | "reports" | "logs" | "users_access"
 ) {
   const map: Record<string, string | null> = {
     projects: "project",
@@ -236,6 +296,7 @@ function clearSearchForTab(
     fields: null,
     reports: null,
     logs: null,
+    users_access: null,
   };
   const ent = map[t];
   if (ent) localStorage.removeItem(`ui.search.${ent}`);

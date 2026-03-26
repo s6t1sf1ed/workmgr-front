@@ -56,6 +56,18 @@ export async function api<T = any>(path: string, opts: RequestInit = {}): Promis
     window.dispatchEvent(new Event("app:logout"));
     throw new Error("Unauthorized");
   }
+  if (res.status === 403) {
+    const text = await res.text().catch(() => "");
+    const message = text || "У вас недостаточно прав";
+
+    window.dispatchEvent(
+      new CustomEvent("app:forbidden", {
+        detail: { message },
+      })
+    );
+
+    throw new Error(message);
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(text || `${res.status} ${res.statusText}`);
@@ -87,9 +99,25 @@ export async function apiBlob(path: string, opts: RequestInit = {}): Promise<Blo
     window.dispatchEvent(new Event("app:logout"));
     throw new Error("Unauthorized");
   }
+  if (res.status === 403) {
+    const text = await res.text().catch(() => "");
+    const message = text || "У вас недостаточно прав";
+
+    window.dispatchEvent(
+      new CustomEvent("app:forbidden", {
+        detail: { message },
+      })
+    );
+
+    throw new Error(message);
+  }
+  
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return await res.blob();
+
 }
+
+
 
 /* утилиты */
 
@@ -99,6 +127,17 @@ function qs(params: Record<string, any> = {}): string {
 }
 
 /* API */
+
+export type MeInfo = {
+  id: string;
+  name?: string;
+  login?: string;
+  telegram_id?: string;
+  role?: string;
+  permissions?: string[];
+  company?: { id?: string | null; name?: string };
+};
+
 
 // Отчёты
 export const Reports = {
@@ -176,7 +215,7 @@ export async function downloadBlob(path: string): Promise<Blob> {
 
 // Профиль
 export const Me = {
-  get: () => api("/api/me"),
+  get: () => api<MeInfo>("/api/me"),
   patch: (data: { name?: string; telegram_id?: string }) =>
     api("/api/me", { method: "PATCH", body: JSON.stringify(data) }),
   changePassword: (data: { current_password: string; new_password: string }) =>
@@ -187,6 +226,14 @@ export const Me = {
 export const AdminLogs = {
   list: (params: { limit?: number; offset?: number; entity?: string; entityId?: string } = {}) =>
     api(`/api/admin/logs${qs(params)}`),
+};
+
+
+export const AdminUsers = {
+  list: () => api<{ items: any[] }>("/api/admin/users"),
+  permissions: () => api<{ items: { key: string; label: string }[] }>("/api/admin/users/permissions"),
+  update: (id: string, data: { permissions?: string[]; name?: string }) =>
+    api(`/api/admin/users/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
 };
 
 // Проекты

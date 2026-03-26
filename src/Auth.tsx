@@ -8,8 +8,10 @@ export default function Auth({ onDone }: { onDone: () => void }) {
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  //const [company, setCompany] = useState("");
-  //const [name, setName] = useState("");
+
+  // const [company, setCompany] = useState("");
+  // const [name, setName] = useState("");
+
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -21,7 +23,7 @@ export default function Auth({ onDone }: { onDone: () => void }) {
       let path = "/auth/login";
       let body: any = { email, password };
 
-      /*  ===== регистрация временно отключена =====
+      /*
       if (mode === "company") {
         path = "/auth/register-company";
         body = { email, password, company, name };
@@ -29,12 +31,13 @@ export default function Auth({ onDone }: { onDone: () => void }) {
         path = "/auth/register-employee";
         body = { email, password, company, name };
       }
-      ============================================ */
+      */
 
       const res = await api<{ access_token: string }>(path, {
         method: "POST",
         body: JSON.stringify(body),
       });
+
       setToken(res.access_token);
       onDone();
     } catch (e: any) {
@@ -65,11 +68,15 @@ export default function Auth({ onDone }: { onDone: () => void }) {
 
         <div className="space-y-3">
           {/*
-          {(mode === "company" || mode === "employee") && (S
+          {(mode === "company" || mode === "employee") && (
             <>
               <input
                 className="w-full rounded-xl border px-3 py-2"
-                placeholder={mode === "company" ? "Название компании" : "Компания (название или код)"}
+                placeholder={
+                  mode === "company"
+                    ? "Название компании"
+                    : "Компания (название или код)"
+                }
                 value={company}
                 onChange={(e) => setCompany(e.target.value)}
               />
@@ -82,12 +89,14 @@ export default function Auth({ onDone }: { onDone: () => void }) {
             </>
           )}
           */}
+
           <input
             className="w-full rounded-xl border px-3 py-2"
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
+
           <input
             className="w-full rounded-xl border px-3 py-2"
             placeholder="Пароль"
@@ -98,7 +107,11 @@ export default function Auth({ onDone }: { onDone: () => void }) {
 
           {err && <div className="text-red-600 text-sm">{err}</div>}
 
-          <button className="w-full rounded-xl border px-3 py-2" onClick={submit} disabled={loading}>
+          <button
+            className="w-full rounded-xl border px-3 py-2"
+            onClick={submit}
+            disabled={loading}
+          >
             Войти
           </button>
         </div>
