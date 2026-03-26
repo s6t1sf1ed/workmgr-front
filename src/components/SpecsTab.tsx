@@ -114,17 +114,6 @@ export type Item = {
 
 export type TreeNode = Item & { children: TreeNode[] };
 
-export type Work = {
-  _id: string;
-  projectId: string;
-  sectionId: string;
-  itemId: string;
-  name: string;
-  qty_plan?: number;
-  qty_fact?: number;
-  order?: number;
-  deleted?: boolean;
-};
 
 export type SectionAttachment = {
   _id: string;
@@ -253,25 +242,6 @@ const API = {
       }),
 
     details: (id: string) => api<any>(`/api/spec/items/${id}`),
-  },
-
-  works: {
-    list: (projectId: string) =>
-      api<{ items: Work[] }>(`/api/projects/${projectId}/spec/works`),
-    create: (projectId: string, payload: Partial<Work>) =>
-      api<Work>(`/api/projects/${projectId}/spec/works`, {
-        method: "POST",
-        body: JSON.stringify(payload),
-      }),
-    patch: (id: string, payload: Partial<Work>) =>
-      api<Work>(`/api/spec/works/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify(payload),
-      }),
-    deleteForever: (id: string) =>
-      api(`/api/spec/works/${id}`, {
-        method: "DELETE",
-      }),
   },
 
   reorder: (data: {
@@ -475,7 +445,6 @@ function VersionSelect({
 export default function SpecsTab({ projectId }: { projectId: string }) {
   const [sections, setSections] = useState<Section[]>([]);
   const [items, setItems] = useState<Item[]>([]);
-  const [works, setWorks] = useState<Work[]>([]);
   const [onlyArchive, setOnlyArchive] = useState(false);
   const [dragItem, setDragItem] = useState<{
     sectionId: string;
@@ -494,10 +463,6 @@ export default function SpecsTab({ projectId }: { projectId: string }) {
 
   // редактирование строк (а также черновики new::...)
   const [editing, setEditing] = useState<Record<string, EditRow>>({});
-
-  // Работы: черновики и редактирование
-  const [workDrafts, setWorkDrafts] = useState<Record<string, any>>({});
-  const [workEditing, setWorkEditing] = useState<Record<string, any>>({});
 
   // Поповер "шестерёнки"
   const [gearOpen, setGearOpen] = useState<string | null>(null);
@@ -560,21 +525,6 @@ export default function SpecsTab({ projectId }: { projectId: string }) {
     return bySection;
   }, [items]);
 
-  // Работы по itemId
-  const worksByItem = useMemo(() => {
-    const by: Record<string, Work[]> = {};
-    for (const w of works) {
-      if (w.deleted) continue;
-      if (!w.itemId) continue;
-      if (!by[w.itemId]) by[w.itemId] = [];
-      by[w.itemId].push(w);
-    }
-    for (const key of Object.keys(by)) {
-      by[key].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    }
-    return by;
-  }, [works]);
-
   async function loadAll() {
     const [secActive, secDeleted] = await Promise.all([
       API.sections.list(projectId, 0),
@@ -604,8 +554,6 @@ export default function SpecsTab({ projectId }: { projectId: string }) {
     setSections(secs);
     setItems(its);
 
-    const worksResp = await API.works.list(projectId);
-    setWorks(worksResp.items || []);
   }
 
   const handleExportSection = async (s: Section) => {
@@ -1083,97 +1031,6 @@ export default function SpecsTab({ projectId }: { projectId: string }) {
     await loadAll();
   };
 
-  /* работы под позициями */
-
-  const startAddWork = (sectionId: string, itemId: string) => {
-    const uid =
-      Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    const key = `work::${itemId}::${uid}`;
-    setWorkDrafts((st) => ({
-      ...st,
-      [key]: {
-        projectId,
-        sectionId,
-        itemId,
-        name: "",
-        qty_plan: 0,
-      },
-    }));
-  };
-
-  const commitNewWork = async (key: string) => {
-    const d = workDrafts[key];
-    if (!d || !String(d.name || "").trim()) return;
-
-    await API.works.create(projectId, {
-      projectId,
-      sectionId: d.sectionId,
-      itemId: d.itemId,
-      name: String(d.name || ""),
-      qty_plan: Number(d.qty_plan || 0),
-    });
-
-    setWorkDrafts((st) => {
-      const copy = { ...st };
-      delete copy[key];
-      return copy;
-    });
-
-    await loadAll();
-  };
-
-  const cancelNewWork = (key: string) => {
-    setWorkDrafts((st) => {
-      const copy = { ...st };
-      delete copy[key];
-      return copy;
-    });
-  };
-
-  const startEditWork = (w: Work) => {
-    setWorkEditing((st) => ({
-      ...st,
-      [w._id]: {
-        name: w.name || "",
-        qty_plan: w.qty_plan ?? 0,
-      },
-    }));
-  };
-
-  const cancelEditWork = (workId: string) => {
-    setWorkEditing((st) => {
-      const copy = { ...st };
-      delete copy[workId];
-      return copy;
-    });
-  };
-
-  const commitEditWork = async (w: Work) => {
-    const d = workEditing[w._id];
-    if (!d) return;
-
-    const payload: Partial<Work> = {
-      name: String(d.name || ""),
-      qty_plan: Number(d.qty_plan || 0),
-    };
-
-    await API.works.patch(w._id, payload);
-
-    setWorkEditing((st) => {
-      const copy = { ...st };
-      delete copy[w._id];
-      return copy;
-    });
-
-    await loadAll();
-  };
-
-  const deleteWorkForever = async (w: Work) => {
-    if (!confirm("Удалить работу безвозвратно?")) return;
-    await API.works.deleteForever(w._id);
-    await loadAll();
-  };
-
   /* drag & drop */
 
   async function reorderWithinParent(
@@ -1226,10 +1083,8 @@ export default function SpecsTab({ projectId }: { projectId: string }) {
   );
 
   const actionsForItem = (
-    s: Section,
     node: TreeNode,
     sectionEditing: boolean,
-    isHeader: boolean
   ) => {
     if (onlyArchive) {
       return (
@@ -1255,18 +1110,6 @@ export default function SpecsTab({ projectId }: { projectId: string }) {
     const isEdit = !!editing[node._id];
     return (
       <div className="flex gap-2 justify-end">
-        {sectionEditing && !isEdit && !isHeader && (
-          <>
-            <button
-              className={iconBtn}
-              title="Добавить работу"
-              onClick={() => startAddWork(s._id, node._id)}
-            >
-              <Icon.Plus />
-            </button>
-          </>
-        )}
-
         {isEdit ? (
           <>
             <button
@@ -1630,11 +1473,6 @@ export default function SpecsTab({ projectId }: { projectId: string }) {
       : renderRowCells(s, node._id, node, false)
     ).filter((cell: any) => !(cell?.key && String(cell.key) === "pos"));
 
-    const itemWorks = isHeader ? [] : worksByItem[node._id] || [];
-    const workDraftKeys = Object.keys(workDrafts).filter((k) =>
-      k.startsWith(`work::${node._id}::`)
-    );
-
     return (
       <React.Fragment key={node._id}>
         <tr
@@ -1677,196 +1515,9 @@ export default function SpecsTab({ projectId }: { projectId: string }) {
           )}
 
           <td className="p-2 border-l border-border/40">
-            {actionsForItem(s, node, sectionEditing, isHeader)}
+            {actionsForItem(node, sectionEditing)}
           </td>
         </tr>
-
-        {/* Работы, привязанные к этой позиции */}
-        {itemWorks.map((w) => {
-          const edW = workEditing[w._id];
-          return (
-            <tr
-              key={`work-${w._id}`}
-              className="border-b bg-muted/40 border-l-4 border-blue-400"
-            >
-              <td className="p-2 w-16 border-r border-border/40" />
-              <td
-                className="p-2 border-l border-border/40"
-                colSpan={visibleColsCount}
-              >
-                {edW ? (
-                  <div className="flex items-center justify-between gap-4">
-                    <input
-                      className="rounded-md border px-2 py-1 text-sm flex-1"
-                      placeholder="Работа"
-                      value={edW.name ?? ""}
-                      onChange={(e) =>
-                        setWorkEditing((st) => ({
-                          ...st,
-                          [w._id]: {
-                            ...(st[w._id] || {}),
-                            name: e.target.value,
-                          },
-                        }))
-                      }
-                    />
-                    <div className="flex items-center gap-4 text-xs">
-                      <div className="flex items-center gap-1">
-                        <span className="text-muted-foreground">
-                          План:
-                        </span>
-                        <input
-                          className="rounded-md border px-2 py-1 text-xs w-20"
-                          type="number"
-                          value={edW.qty_plan ?? ""}
-                          onChange={(e) =>
-                            setWorkEditing((st) => ({
-                              ...st,
-                              [w._id]: {
-                                ...(st[w._id] || {}),
-                                qty_plan: e.target.value,
-                              },
-                            }))
-                          }
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="text-sm">
-                      <span className="font-medium mr-1">Работа:</span>
-                      <span>{w.name}</span>
-                    </div>
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                      <span>
-                        План:{" "}
-                          <span className="text-foreground">
-                            {w.qty_plan ?? 0}
-                          </span>
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </td>
-              <td className="p-2 border-l border-border/40">
-                {sectionEditing ? (
-                  edW ? (
-                    <div className="flex gap-2 justify-end">
-                      <button
-                        className={iconBtn}
-                        title="Сохранить работу"
-                        onClick={() => commitEditWork(w)}
-                      >
-                        <Icon.Check />
-                      </button>
-                      <button
-                        className={iconBtn}
-                        title="Отмена"
-                        onClick={() => cancelEditWork(w._id)}
-                      >
-                        <Icon.X />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex gap-2 justify-end">
-                      <button
-                        className={iconBtn}
-                        title="Редактировать работу"
-                        onClick={() => startEditWork(w)}
-                      >
-                        <Icon.Pencil />
-                      </button>
-                      <button
-                        className={`${iconBtn} border-red-200 text-red-600 hover:bg-red-50`}
-                        title="Удалить работу"
-                        onClick={() => deleteWorkForever(w)}
-                      >
-                        <Icon.Trash />
-                      </button>
-                    </div>
-                  )
-                ) : (
-                  <div className="h-8" />
-                )}
-              </td>
-            </tr>
-          );
-        })}
-
-        {/* Черновики новых работ под позицией */}
-        {sectionEditing &&
-          workDraftKeys.map((key) => {
-            const d = workDrafts[key] || {};
-            return (
-              <tr
-                key={key}
-                className="border-b bg-muted/40 border-l-4 border-dashed border-blue-400"
-              >
-                <td className="p-2 w-16 border-r border-border/40" />
-                <td
-                  className="p-2 border-l border-border/40"
-                  colSpan={visibleColsCount}
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <input
-                      className="rounded-md border px-2 py-1 text-sm flex-1"
-                      placeholder="Работа"
-                      value={d.name ?? ""}
-                      onChange={(e) =>
-                        setWorkDrafts((st) => ({
-                          ...st,
-                          [key]: {
-                            ...(st[key] || {}),
-                            name: e.target.value,
-                          },
-                        }))
-                      }
-                    />
-                    <div className="flex items-center gap-4 text-xs">
-                      <div className="flex items-center gap-1">
-                        <span className="text-muted-foreground">
-                          План:
-                        </span>
-                        <input
-                          className="rounded-md border px-2 py-1 text-xs w-20"
-                          type="number"
-                          value={d.qty_plan ?? ""}
-                          onChange={(e) =>
-                            setWorkDrafts((st) => ({
-                              ...st,
-                              [key]: {
-                                ...(st[key] || {}),
-                                qty_plan: e.target.value,
-                              },
-                            }))
-                          }
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </td>
-                <td className="p-2 border-l border-border/40">
-                  <div className="flex gap-2 justify-end">
-                    <button
-                      className={iconBtn}
-                      title="Создать работу"
-                      onClick={() => commitNewWork(key)}
-                    >
-                      <Icon.Check />
-                    </button>
-                    <button
-                      className={iconBtn}
-                      title="Отмена"
-                      onClick={() => cancelNewWork(key)}
-                    >
-                      <Icon.X />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
 
         {Object.keys(editing)
           .filter((k) => k.startsWith(`new::${s._id}::${node._id}::`))

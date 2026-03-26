@@ -9,6 +9,7 @@ import SpecsTab from "../components/SpecsTab";
 import SpecsShipmentTab from "../components/SpecsShipmentTab";
 import SpecsExecutionTab from "../components/SpecsExecutionTab";
 import SpecsSummaryTab from "../components/SpecsSummaryTab";
+import SpecsVorTab from "../components/SpecsVorTab";
 
 /* иконки */
 const Icon = {
@@ -198,7 +199,7 @@ export default function ProjectViewPage({
 
   // режим внутри вкладки Спецификации
   const [specMode, setSpecMode] = useState<
-    "editor" | "shipment" | "execution" | "summary"
+    "editor" | "shipment" | "execution" | "summary" | "vor"
   >("editor");
 
   // задачи
@@ -742,13 +743,21 @@ export default function ProjectViewPage({
             >
               Выполнение
             </button>
-            
+            <button
+              type="button"
+              className={`rounded-xl border px-3 py-1 text-sm ${
+                specMode === "vor" ? "bg-muted/60" : ""
+              }`}
+              onClick={() => setSpecMode("vor")}
+            >
+              ВОР
+            </button>
           </div>
           {specMode === "summary" && <SpecsSummaryTab projectId={projectId} />}
           {specMode === "editor" && <SpecsTab projectId={projectId} />}
           {specMode === "shipment" && <SpecsShipmentTab projectId={projectId} />}
           {specMode === "execution" && <SpecsExecutionTab projectId={projectId} />}
-          
+          {specMode === "vor" && <SpecsVorTab projectId={projectId} />}
         </div>
       )}
 
