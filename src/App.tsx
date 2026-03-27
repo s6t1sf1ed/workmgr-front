@@ -66,7 +66,11 @@ export default function App() {
   const [brand, setBrand] = useState<string>("");
   const [me, setMe] = useState<MeInfo | null>(null);
 
-  const [projectViewId, setProjectViewId] = useState<string | null>(null);
+  const [projectView, setProjectView] = useState<{
+    projectId: string;
+    tab: "about" | "tasks" | "access" | "files" | "worklog" | "specs";
+    specMode?: "editor" | "shipment" | "execution" | "summary" | "vor";
+  } | null>(null);
 
   const [forbiddenMessage, setForbiddenMessage] = useState<string | null>(null);
 
@@ -151,22 +155,29 @@ export default function App() {
   useEffect(() => {
     if (!allowedTabs.length) return;
     if (!allowedTabs.includes(tab)) setTab(allowedTabs[0]);
-  }, [tab, me?.id]);
+  }, [tab, allowedTabs]);
 
   if (!authed) return <Auth onDone={() => setAuthed(true)} />;
 
-  const pageTitle = projectViewId ? "Проект" : TITLES[tab];
+  const pageTitle = projectView ? "Проект" : TITLES[tab];
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
       <div className="flex min-h-dvh">
         <Sidebar
-          active={projectViewId ? "projects" : tab}
+          active={projectView ? "projects" : tab}
           onSelect={(k) => {
-            setProjectViewId(null);
+            setProjectView(null);
             clearSearchForTab(tab);
-            setTab(k as any);
+            setTab(k);
           }}
+          onOpenProjectView={(projectId, projectTab = "about", specMode = "editor") => {
+            setTab("projects");
+            setProjectView({ projectId, tab: projectTab, specMode });
+          }}
+          currentProjectId={projectView?.projectId}
+          currentProjectTab={projectView?.tab}
+          currentProjectSpecMode={projectView?.specMode}
           brand={brand}
           onLogout={handleLogout}
           me={me}
@@ -177,10 +188,13 @@ export default function App() {
             <div className="text-2xl font-semibold">{pageTitle}</div>
           </header>
 
-          {projectViewId ? (
+          {projectView ? (
             <ProjectViewPage
-              projectId={projectViewId}
-              onBack={() => setProjectViewId(null)}
+              key={`${projectView.projectId}:${projectView.tab}:${projectView.specMode || ""}`}
+              projectId={projectView.projectId}
+              initialTab={projectView.tab}
+              initialSpecMode={projectView.specMode || "editor"}
+              onBack={() => setProjectView(null)}
             />
           ) : (
             <>
@@ -191,7 +205,13 @@ export default function App() {
                   <EntityTable
                     entity="project"
                     archived={scopeProjects === "archive"}
-                    onOpenProject={(id: string) => setProjectViewId(id)}
+                    onOpenProject={(id: string) =>
+                      setProjectView({
+                        projectId: id,
+                        tab: "about",
+                        specMode: "editor",
+                      })
+                    }
                   />
                 </div>
               )}

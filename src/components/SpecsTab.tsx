@@ -47,11 +47,6 @@ const Icon = {
       <path fill="currentColor" d="m9 6 6 6-6 6z" />
     </svg>
   ),
-  ChevronDown: (p: any) => (
-    <svg viewBox="0 0 24 24" width="14" height="14" {...p}>
-      <path fill="currentColor" d="m7 10 5 5 5-5z" />
-    </svg>
-  ),
   Pencil: (p: any) => (
     <svg viewBox="0 0 24 24" width="16" height="16" {...p}>
       <path
@@ -81,6 +76,8 @@ export type Section = {
   order?: number;
   deleted?: boolean;
   comment?: string;
+  isActual?: boolean;
+  actualityKey?: string;
   activeVersion?: number;
   version?: number;
   versions?: { v: number; savedAt?: string }[];
@@ -364,83 +361,6 @@ export const COL_META: Record<
   total: { label: "Стоимость", w: "w-28", isCalc: true },
   note: { label: "Примечание", w: "w-64" },
 };
-
-/* селектор версий РАЗДЕЛА */
-
-function VersionSelect({
-  av,
-  versions,
-  onPick,
-  onDelete,
-}: {
-  av: number;
-  versions: number[];
-  onPick: (v: number) => void | Promise<void>;
-  onDelete: (v: number) => void | Promise<void>;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const onDown = (e: MouseEvent) => {
-      if (!ref.current) return;
-      if (!ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("pointerdown", onDown, true);
-    return () => document.removeEventListener("pointerdown", onDown, true);
-  }, []);
-
-  return (
-    <div ref={ref} className="relative inline-flex items-center">
-      <button
-        type="button"
-        className="inline-flex items-center gap-1 rounded-md border px-2 h-8 text-xs"
-        onClick={() => setOpen((v) => !v)}
-      >
-        v{av}
-        <Icon.ChevronDown />
-      </button>
-
-      {open && (
-        <div className="absolute right-0 top-[calc(100%+6px)] z-[70] min-w-[112px] max-h-[70vh] overflow-auto rounded-md border bg-background shadow-lg">
-          {versions.map((v) => (
-            <div key={v} className="flex items-center justify-between">
-              <button
-                type="button"
-                className={`block text-left px-3 py-1.5 text-xs hover:bg-muted ${
-                  v === av ? "font-medium" : ""
-                }`}
-                onClick={async () => {
-                  setOpen(false);
-                  if (v !== av) await onPick(v);
-                }}
-              >
-                v{v}
-              </button>
-              {v !== av && v !== 1 && (
-                <button
-                  type="button"
-                  className="px-2 text-xs text-red-600 hover:text-red-700"
-                  title="Удалить версию"
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    setOpen(false);
-                    if (confirm(`Удалить версию v${v}?`)) {
-                      await onDelete(v);
-                    }
-                  }}
-                >
-                  ×
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 export default function SpecsTab({ projectId }: { projectId: string }) {
   const [sections, setSections] = useState<Section[]>([]);
@@ -736,37 +656,10 @@ export default function SpecsTab({ projectId }: { projectId: string }) {
     await API.sections.patch(s._id, { comment });
   };
 
-  const setSectionActiveVersion = async (s: Section, v: number) => {
-    await API.sections.patch(s._id, { setActiveVersion: v });
+  const toggleSectionActuality = async (s: Section) => {
+    await API.sections.patch(s._id, { isActual: !(s.isActual !== false) });
     await loadAll();
   };
-
-  async function deleteSectionVersion(s: Section, v: number) {
-    try {
-      const vv = Number(v);
-      setSections((prev) =>
-        prev.map((sec) =>
-          sec._id === s._id
-            ? {
-                ...sec,
-                versions: (sec.versions || []).filter((x) => x.v !== vv),
-              }
-            : sec
-        )
-      );
-      await API.sections.deleteVersion(s._id, vv);
-      await loadAll();
-    } catch (e: any) {
-      await loadAll();
-      const msg =
-        e?.message ||
-        e?.response?.data?.message ||
-        e?.response?.data?.detail ||
-        "Не удалось удалить версию";
-      alert(msg);
-      console.error("deleteSectionVersion error:", e);
-    }
-  }
 
   // столбцы
   function getSectionColumns(s: Section) {
@@ -1313,74 +1206,6 @@ export default function SpecsTab({ projectId }: { projectId: string }) {
     });
   }
 
-  function buildCommitItemsPayload(section: Section) {
-    const rowsAll = filterBySectionVersion(section, grouped[section._id] || []);
-    const payload: any[] = [];
-
-    for (const it of rowsAll) {
-      const d = editing[it._id];
-      if (!d) continue;
-      payload.push({
-        _id: it._id,
-        pos: it.pos,
-        name: String(d.name ?? it.name ?? ""),
-        sku: String(d.sku ?? it.sku ?? ""),
-        vendor: String(d.vendor ?? it.vendor ?? ""),
-        unit: String(d.unit ?? it.unit ?? ""),
-        qty:
-          (d.rowType || it.rowType || "item") === "header"
-            ? undefined
-            : Number(d.qty ?? it.qty ?? 0),
-        price_work:
-          (d.rowType || it.rowType || "item") === "header"
-            ? undefined
-            : Number(d.price_work ?? it.price_work ?? 0),
-        price_mat:
-          (d.rowType || it.rowType || "item") === "header"
-            ? undefined
-            : Number(d.price_mat ?? it.price_mat ?? 0),
-        note: String(d.note ?? it.note ?? ""),
-        rowType: d.rowType || it.rowType || "item",
-      });
-    }
-
-    const newKeys = Object.keys(editing).filter((k) =>
-      k.startsWith(`new::${section._id}::`)
-    );
-    for (const key of newKeys) {
-      const ed = editing[key];
-      if (!ed || !String(ed.name || "").trim()) continue;
-
-      const parts = key.split("::");
-      const parentRaw = parts[2];
-      const parentId = parentRaw === "root" ? null : parentRaw;
-
-      payload.push({
-        parentId,
-        name: String(ed.name || ""),
-        sku: String(ed.sku || ""),
-        vendor: String(ed.vendor || ""),
-        unit: String(ed.unit || ""),
-        qty:
-          (ed.rowType || "item") === "header"
-            ? undefined
-            : Number(ed.qty || 0),
-        price_work:
-          (ed.rowType || "item") === "header"
-            ? undefined
-            : Number(ed.price_work || 0),
-        price_mat:
-          (ed.rowType || "item") === "header"
-            ? undefined
-            : Number(ed.price_mat || 0),
-        note: String(ed.note || ""),
-        rowType: ed.rowType || "item",
-      });
-    }
-
-    return payload;
-  }
-
   function clearEditingForSection(sectionId: string) {
     setEditing((prev) => {
       const copy = { ...prev };
@@ -1619,7 +1444,12 @@ export default function SpecsTab({ projectId }: { projectId: string }) {
     }
 
     return (
-      <div key={s._id} className="rounded-2xl border overflow-visible">
+      <div
+        key={s._id}
+        className={`rounded-2xl border overflow-visible ${
+          s.isActual === false ? "border-amber-300 bg-amber-50/30" : ""
+        }`}
+      >
         {/* Шапка раздела */}
         <div className="bg-muted/40 px-3 py-2 flex items-center gap-2">
           {/* заголовок / переименование */}
@@ -1655,62 +1485,41 @@ export default function SpecsTab({ projectId }: { projectId: string }) {
             )}
           </div>
 
-          {/* Версии раздела */}
-          <div className="ml-2">
-            <VersionSelect
-              av={s.activeVersion || 1}
-              versions={
-                (s.versions || [])
-                  .map((x) => x.v)
-                  .filter((v) => Number.isFinite(v))
-                  .sort((a, b) => a - b) || [1]
-              }
-              onPick={(v) => {
-                void setSectionActiveVersion(s, v);
+          <div className="ml-2 flex items-center gap-2">
+            <button
+              type="button"
+              className={`rounded-md border px-3 h-8 text-sm ${
+                s.isActual === false
+                  ? "border-amber-300 bg-amber-50 text-amber-700"
+                  : "border-emerald-300 bg-emerald-50 text-emerald-700"
+              }`}
+              onClick={() => {
+                void toggleSectionActuality(s);
               }}
-              onDelete={(v) => {
-                void deleteSectionVersion(s, v);
-              }}
-            />
+            >
+              {s.isActual === false ? "Неактуальна" : "Актуальна"}
+            </button>
           </div>
 
           {/* режим редактирования */}
           <div className="ml-2 flex items-center gap-2">
             {!sectionEditing ? (
-              <>
-                <button
-                  type="button"
-                  className="rounded-md border px-3 h-8 text-sm"
-                  onClick={() => {
-                    setEditSections((m) => ({
-                      ...m,
-                      [s._id]: true,
-                    }));
-                    setSectionFinishMode((m) => ({
-                      ...m,
-                      [s._id]: "edit",
-                    }));
-                  }}
-                >
-                  Изменить
-                </button>
-                <button
-                  type="button"
-                  className="rounded-md border px-3 h-8 text-sm bg-muted/40"
-                  onClick={() => {
-                    setEditSections((m) => ({
-                      ...m,
-                      [s._id]: true,
-                    }));
-                    setSectionFinishMode((m) => ({
-                      ...m,
-                      [s._id]: "replace",
-                    }));
-                  }}
-                >
-                  Заменить
-                </button>
-              </>
+              <button
+                type="button"
+                className="rounded-md border px-3 h-8 text-sm"
+                onClick={() => {
+                  setEditSections((m) => ({
+                    ...m,
+                    [s._id]: true,
+                  }));
+                  setSectionFinishMode((m) => ({
+                    ...m,
+                    [s._id]: "edit",
+                  }));
+                }}
+              >
+                Изменить
+              </button>
             ) : (
               <>
                 <button
@@ -1719,18 +1528,8 @@ export default function SpecsTab({ projectId }: { projectId: string }) {
                   onClick={async () => {
                     await saveSectionTitle(s);
 
-                    if (sectionFinishMode[s._id] === "replace") {
-                      const itemsPayload = buildCommitItemsPayload(s);
-
-                      await API.sections.patch(s._id, {
-                        commit: true,
-                        items: itemsPayload,
-                      });
-
-                      clearEditingForSection(s._id);
-                      await loadAll();
-                    } else {
-                    }
+                    clearEditingForSection(s._id);
+                    await loadAll();
 
                     setEditSections((m) => ({
                       ...m,
@@ -1742,9 +1541,7 @@ export default function SpecsTab({ projectId }: { projectId: string }) {
                     }));
                   }}
                 >
-                  {sectionFinishMode[s._id] === "replace"
-                    ? "Сохранить как v+1"
-                    : "Сохранить"}
+                  Сохранить
                 </button>
                 <button
                   type="button"
@@ -2223,9 +2020,8 @@ export default function SpecsTab({ projectId }: { projectId: string }) {
         <>
           {sections.length ? (
             <div className="rounded-2xl border overflow-hidden">
-              <div className="grid grid-cols-[minmax(0,2fr)_120px_100px_140px] px-4 py-2 text-xs font-medium text-muted-foreground bg-muted/40">
+              <div className="grid grid-cols-[minmax(0,2fr)_100px_220px] px-4 py-2 text-xs font-medium text-muted-foreground bg-muted/40">
                 <div>Раздел</div>
-                <div className="text-center">Статус</div>
                 <div className="text-center">Позиции</div>
                 <div className="text-right">Действия</div>
               </div>
@@ -2235,22 +2031,26 @@ export default function SpecsTab({ projectId }: { projectId: string }) {
                 const rowsAll = filterBySectionVersion(s, rowsAllAll);
                 const rows = visibleRows(rowsAll);
 
-                const statusLabel = s.deleted ? "В архиве" : "Активен";
-
                 return (
                   <div
                     key={s._id}
-                    className="border-t bg-background hover:bg-muted/40 transition cursor-pointer"
+                    className={`border-t bg-background hover:bg-muted/40 transition cursor-pointer ${
+                      s.isActual === false ? "bg-amber-50/30" : ""
+                    }`}
                     onClick={() => setSelectedSectionId(s._id)}
                   >
-                    <div className="grid grid-cols-[minmax(0,2fr)_120px_100px_140px] px-4 py-3 items-center text-sm">
+                    <div className="grid grid-cols-[minmax(0,2fr)_100px_220px] px-4 py-3 items-center text-sm gap-3">
                       {/* Раздел */}
-                      <div className="flex flex-col gap-1">
-                        <div className="font-medium">
-                          {s.title || "Раздел"}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Версия v{sectionVersion(s)}
+                      <div className="flex flex-col gap-1 min-w-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="font-medium truncate">
+                            {s.title || "Раздел"}
+                          </div>
+                          {s.isActual === false && (
+                            <span className="shrink-0 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">
+                              Неактуальна
+                            </span>
+                          )}
                         </div>
                         {s.comment && (
                           <div className="text-xs text-muted-foreground line-clamp-1">
@@ -2259,16 +2059,28 @@ export default function SpecsTab({ projectId }: { projectId: string }) {
                         )}
                       </div>
 
-                      {/* Статус */}
-                      <div className="text-center text-xs text-muted-foreground">
-                        {statusLabel}
-                      </div>
-
                       {/* Позиции */}
                       <div className="text-center text-sm">{rows.length}</div>
 
-                      {/* архив/удаление */}
+                      {/* действия */}
                       <div className="flex items-center justify-end gap-2">
+                        {!onlyArchive && (
+                          <button
+                            type="button"
+                            className={`rounded-xl border px-2 py-1 text-xs ${
+                              s.isActual === false
+                                ? "border-amber-300 bg-amber-50 text-amber-700"
+                                : ""
+                            }`}
+                            title="Переключить актуальность"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleSectionActuality(s);
+                            }}
+                          >
+                            {s.isActual === false ? "Неактуальна" : "Актуальна"}
+                          </button>
+                        )}
                         {!onlyArchive ? (
                           <button
                             type="button"

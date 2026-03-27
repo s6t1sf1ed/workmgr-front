@@ -73,6 +73,8 @@ type VorSection = {
   specSectionId?: string | null;
   order?: number;
   deleted?: boolean;
+  isActual?: boolean;
+  actualityKey?: string;
 };
 
 type VorWork = {
@@ -104,6 +106,7 @@ type SpecSectionLite = {
   title?: string;
   activeVersion?: number;
   version?: number;
+  isActual?: boolean;
 };
 
 type SourceItem = {
@@ -203,10 +206,6 @@ const API = {
   },
 };
 
-function specVersionLabel(spec?: SpecSectionLite | null) {
-  return spec?.activeVersion || spec?.version || 1;
-}
-
 function comparePosStr(a?: string, b?: string) {
   const as = String(a || "")
     .split(".")
@@ -245,6 +244,7 @@ type SectionDraft = {
   date: string;
   specSectionId: string;
   title: string;
+  isActual: boolean;
 };
 
 type WorkDraft = {
@@ -277,6 +277,7 @@ export default function SpecsVorTab({ projectId }: Props) {
     date: todayIso(),
     specSectionId: "",
     title: "",
+    isActual: true,
   });
 
   const [sectionForm, setSectionForm] = useState<SectionDraft>({
@@ -284,6 +285,7 @@ export default function SpecsVorTab({ projectId }: Props) {
     date: todayIso(),
     specSectionId: "",
     title: "",
+    isActual: true,
   });
 
   const [newWork, setNewWork] = useState<WorkDraft>({ name: "" });
@@ -344,6 +346,7 @@ export default function SpecsVorTab({ projectId }: Props) {
         date: todayIso(),
         specSectionId: "",
         title: "",
+        isActual: true,
       });
       return;
     }
@@ -352,6 +355,7 @@ export default function SpecsVorTab({ projectId }: Props) {
       date: activeSection.date || todayIso(),
       specSectionId: activeSection.specSectionId || "",
       title: activeSection.title || activeSection.number || "",
+      isActual: activeSection.isActual !== false,
     });
   }, [activeSection]);
 
@@ -382,11 +386,13 @@ export default function SpecsVorTab({ projectId }: Props) {
         API.specs.sections(projectId),
       ]);
       setProjectName(project?.name || "Проект");
-      setSpecSections(specs.items || []);
-      if ((specs.items || []).length && !createDraft.specSectionId) {
+      const specRows = specs.items || [];
+      setSpecSections(specRows);
+      if (specRows.length && !createDraft.specSectionId) {
+        const preferredSpec = specRows.find((row) => row.isActual !== false) || specRows[0];
         setCreateDraft((prev) => ({
           ...prev,
-          specSectionId: prev.specSectionId || specs.items[0]._id,
+          specSectionId: prev.specSectionId || preferredSpec._id,
         }));
       }
     } catch (e: any) {
@@ -449,6 +455,7 @@ export default function SpecsVorTab({ projectId }: Props) {
         title: createDraft.title.trim() || createDraft.number.trim(),
         date: createDraft.date || todayIso(),
         specSectionId: createDraft.specSectionId || null,
+        isActual: createDraft.isActual,
       });
       setCreatingSection(false);
       setCreateDraft({
@@ -456,6 +463,7 @@ export default function SpecsVorTab({ projectId }: Props) {
         date: todayIso(),
         specSectionId: createDraft.specSectionId,
         title: "",
+        isActual: true,
       });
       await loadSections();
       setSelectedSectionId(created._id);
@@ -477,6 +485,7 @@ export default function SpecsVorTab({ projectId }: Props) {
         title: sectionForm.title.trim() || sectionForm.number.trim(),
         date: sectionForm.date || todayIso(),
         specSectionId: sectionForm.specSectionId || null,
+        isActual: sectionForm.isActual,
       });
       await reloadActiveSection();
     } catch (e: any) {
@@ -492,6 +501,15 @@ export default function SpecsVorTab({ projectId }: Props) {
       await reloadActiveSection();
     } catch (e: any) {
       alert(e?.message || "Не удалось изменить статус ВОР");
+    }
+  }
+
+  async function toggleSectionActuality(section: VorSection) {
+    try {
+      await API.sections.patch(section._id, { isActual: !(section.isActual !== false) });
+      await reloadActiveSection();
+    } catch (e: any) {
+      alert(e?.message || "Не удалось изменить актуальность ВОР");
     }
   }
 
@@ -609,7 +627,7 @@ export default function SpecsVorTab({ projectId }: Props) {
   function specTitle(section?: VorSection | null) {
     const spec = section?.specSectionId ? specsById[section.specSectionId] : null;
     if (!spec) return "— не выбрана —";
-    return `${spec.title || "Спецификация"} · v${specVersionLabel(spec)}`;
+    return `${spec.title || "Спецификация"}${spec.isActual === false ? " · неактуальна" : ""}`;
   }
 
   return (
@@ -634,6 +652,7 @@ export default function SpecsVorTab({ projectId }: Props) {
                 specSectionId:
                   prev.specSectionId || specSections[0]?._id || "",
                 title: prev.title,
+                isActual: prev.isActual,
               }));
             }}
             type="button"
@@ -704,12 +723,22 @@ export default function SpecsVorTab({ projectId }: Props) {
                 <option value="">— не выбрана —</option>
                 {specSections.map((spec) => (
                   <option key={spec._id} value={spec._id}>
-                    {spec.title || "Спецификация"} · v{specVersionLabel(spec)}
+                    {spec.title || "Спецификация"}{spec.isActual === false ? " · неактуальна" : ""}
                   </option>
                 ))}
               </select>
             </label>
           </div>
+          <label className="inline-flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={createDraft.isActual}
+              onChange={(e) =>
+                setCreateDraft((prev) => ({ ...prev, isActual: e.target.checked }))
+              }
+            />
+            Актуальный ВОР
+          </label>
           <div className="flex justify-end gap-2">
             <button
               type="button"
@@ -747,13 +776,22 @@ export default function SpecsVorTab({ projectId }: Props) {
               {sections.map((section) => (
                 <div
                   key={section._id}
-                  className="border-t bg-background hover:bg-muted/40 transition cursor-pointer"
+                  className={`border-t bg-background hover:bg-muted/40 transition cursor-pointer ${
+                    section.isActual === false ? "bg-amber-50/30" : ""
+                  }`}
                   onClick={() => setSelectedSectionId(section._id)}
                 >
                   <div className="grid grid-cols-[minmax(0,1.6fr)_160px_minmax(0,1.2fr)_140px] px-4 py-3 items-center text-sm gap-3">
                     <div className="min-w-0">
-                      <div className="font-medium truncate">
-                        {section.number || section.title || "ВОР"}
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="font-medium truncate">
+                          {section.number || section.title || "ВОР"}
+                        </div>
+                        {section.isActual === false && (
+                          <span className="shrink-0 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">
+                            Неактуальна
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-muted-foreground truncate">
                         {section.title && section.title !== section.number
@@ -768,6 +806,23 @@ export default function SpecsVorTab({ projectId }: Props) {
                       {specTitle(section)}
                     </div>
                     <div className="flex items-center justify-end gap-2">
+                      {!onlyArchive && (
+                        <button
+                          type="button"
+                          className={`rounded-xl border px-2 py-1 text-xs ${
+                            section.isActual === false
+                              ? "border-amber-300 bg-amber-50 text-amber-700"
+                              : ""
+                          }`}
+                          title="Переключить актуальность"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void toggleSectionActuality(section);
+                          }}
+                        >
+                          {section.isActual === false ? "Неактуальна" : "Актуальна"}
+                        </button>
+                      )}
                       {!onlyArchive ? (
                         <button
                           type="button"
@@ -863,16 +918,37 @@ export default function SpecsVorTab({ projectId }: Props) {
                   <option value="">— не выбрана —</option>
                   {specSections.map((spec) => (
                     <option key={spec._id} value={spec._id}>
-                      {spec.title || "Спецификация"} · v{specVersionLabel(spec)}
+                      {spec.title || "Спецификация"}{spec.isActual === false ? " · неактуальна" : ""}
                     </option>
                   ))}
                 </select>
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm md:col-span-4">
+                <input
+                  type="checkbox"
+                  checked={sectionForm.isActual}
+                  onChange={(e) =>
+                    setSectionForm((prev) => ({ ...prev, isActual: e.target.checked }))
+                  }
+                />
+                Актуальный ВОР
               </label>
             </div>
 
             <div className="flex items-center justify-end gap-2 p-4 border-b bg-muted/20">
               {!onlyArchive ? (
                 <>
+                  <button
+                    type="button"
+                    className={`rounded-xl border px-3 py-2 text-sm ${
+                      activeSection.isActual === false
+                        ? "border-amber-300 bg-amber-50 text-amber-700"
+                        : ""
+                    }`}
+                    onClick={() => void toggleSectionActuality(activeSection)}
+                  >
+                    {activeSection.isActual === false ? "Неактуальна" : "Актуальна"}
+                  </button>
                   <button
                     type="button"
                     className={`${iconBtn} w-auto px-3 gap-2`}

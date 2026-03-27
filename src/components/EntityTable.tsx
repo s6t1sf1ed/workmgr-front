@@ -25,6 +25,7 @@ type Project = {
   _id?: string;
   name?: string;
   description?: string;
+  portfolioName?: string;
   accessPersons?: string[];
   address?: string;
   latitude?: number | string;
@@ -99,6 +100,7 @@ export default function EntityTable({
 
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [allPersons, setAllPersons] = useState<Person[]>([]);
+  const [openPortfolios, setOpenPortfolios] = useState<Record<string, boolean>>({});
 
   // Документы сотрудника
   const [pFiles, setPFiles] = useState<PersonFile[]>([]);
@@ -183,6 +185,39 @@ export default function EntityTable({
     );
   }, [items, entity]);
 
+  const projectGroups = useMemo(() => {
+    if (entity !== "project") return [];
+    const map = new Map<string, any[]>();
+    for (const row of rows) {
+      const key = String(row.portfolioName || "").trim() || "Без портфеля";
+      const bucket = map.get(key) || [];
+      bucket.push(row);
+      map.set(key, bucket);
+    }
+
+    return [...map.entries()]
+      .map(([portfolio, projects]) => ({
+        portfolio,
+        projects,
+      }))
+      .sort((a, b) => {
+        if (a.portfolio === "Без портфеля") return 1;
+        if (b.portfolio === "Без портфеля") return -1;
+        return a.portfolio.localeCompare(b.portfolio, "ru", { sensitivity: "base" });
+      });
+  }, [rows, entity]);
+
+  useEffect(() => {
+    if (entity !== "project") return;
+    setOpenPortfolios((prev) => {
+      const next = { ...prev };
+      for (const group of projectGroups) {
+        if (next[group.portfolio] === undefined) next[group.portfolio] = true;
+      }
+      return next;
+    });
+  }, [entity, projectGroups]);
+
   // загрузка документов сотрудника
   useEffect(() => {
     (async () => {
@@ -255,6 +290,15 @@ export default function EntityTable({
               className="w-full rounded-xl border px-3 py-2"
               value={v.name || ""}
               onChange={(e) => set("name", e.target.value)}
+            />
+          </label>
+          <label className="text-sm">
+            Портфель проектов
+            <input
+              className="w-full rounded-xl border px-3 py-2"
+              value={v.portfolioName || ""}
+              onChange={(e) => set("portfolioName", e.target.value)}
+              placeholder="Например: ЕКС"
             />
           </label>
           <label className="text-sm">
@@ -539,6 +583,7 @@ export default function EntityTable({
     project: {
       name: "",
       description: "",
+      portfolioName: "",
       extra: {},
       accessPersons: [],
       address: "",
@@ -584,160 +629,142 @@ export default function EntityTable({
         </div>
       </div>
 
-      <div className="rounded-2xl border max-h-[70vh] overflow-auto">
-        <table className="w-full text-sm zebra">
-          <thead className="bg-muted/50 sticky top-0">
-            <tr>
-              <th className="p-2 text-left">№</th>
-              <th className="p-2 text-left">Основное</th>
-              <th className="p-2 text-left">Обновлено</th>
-              <th className="p-2"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((it, idx) => {
-              const extraLine =
-                entity === "person"
-                  ? `Доступ к : ${
-                      Array.isArray(it.accessProjects) ? it.accessProjects.length : 0
-                    } проектам`
-                  : entity === "project"
-                  ? `${
-                      Array.isArray(it.accessPersons) ? it.accessPersons.length : 0
-                    } Сотрудников с доступом`
-                  : "";
+      {entity === "project" ? (
+        <ProjectPortfolioList
+          groups={projectGroups}
+          openPortfolios={openPortfolios}
+          onTogglePortfolio={(portfolio) =>
+            setOpenPortfolios((prev) => ({
+              ...prev,
+              [portfolio]: !(prev[portfolio] ?? true),
+            }))
+          }
+          onOpenProject={(project) => {
+            if (onOpenProject && project._id) {
+              onOpenProject(String(project._id));
+              return;
+            }
+            setEdit(project);
+          }}
+          onEditProject={setEdit}
+          onToggleArchive={toggleArchive}
+          onDeleteProject={async (project) => {
+            await api(`/api/${entity}/${project._id}`, { method: "DELETE" });
+            await load();
+          }}
+        />
+      ) : (
+        <div className="rounded-2xl border max-h-[70vh] overflow-auto">
+          <table className="w-full text-sm zebra">
+            <thead className="bg-muted/50 sticky top-0">
+              <tr>
+                <th className="p-2 text-left">№</th>
+                <th className="p-2 text-left">Основное</th>
+                <th className="p-2 text-left">Обновлено</th>
+                <th className="p-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((it, idx) => {
+                const extraLine =
+                  entity === "person"
+                    ? `Доступ к : ${
+                        Array.isArray(it.accessProjects) ? it.accessProjects.length : 0
+                      } проектам`
+                    : "";
 
-              const onRowClick = () => {
-                if (entity === "project" && onOpenProject && it._id) {
-                  onOpenProject(String(it._id));
-                  return;
-                }
-                setEdit(it);
-              };
-
-              return (
-                <tr
-                  key={it._id || `${idx}`}
-                  className="border-t hover:bg-muted/30 cursor-pointer"
-                  onClick={onRowClick}
-                >
-                  <td className="p-2 align-top">{it.seq ?? idx + 1}</td>
-                  <td className="p-2 align-top">
-                    {entity === "project" && (
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="font-medium truncate">
-                          {it.name || "Без названия"}
+                return (
+                  <tr
+                    key={it._id || `${idx}`}
+                    className="border-t hover:bg-muted/30 cursor-pointer"
+                    onClick={() => setEdit(it)}
+                  >
+                    <td className="p-2 align-top">{it.seq ?? idx + 1}</td>
+                    <td className="p-2 align-top">
+                      {entity === "person" && (
+                        <div>
+                          <div className="font-medium">{fio(it) || "(Без имени)"}</div>
+                          <div className="text-muted-foreground">
+                            {it.email || ""}
+                            {it.position ? ` * ${it.position}` : ""}
+                            {it.phone ? ` * ${it.phone}` : ""}
+                            {it.telegramId ? ` * tg:${it.telegramId}` : ""}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {extraLine}
+                          </div>
                         </div>
+                      )}
 
-                        <div className="text-xs text-muted-foreground text-right flex-1 flex justify-end flex-wrap gap-x-3 gap-y-0.5">
-                          {it.description && (
-                            <span className="truncate max-w-[24ch]">
-                              {it.description}
-                            </span>
-                          )}
-                          {(it.address || (it.latitude && it.longitude)) && (
-                            <span className="truncate max-w-[28ch]">
-                              {it.address
-                                ? it.address
-                                : it.latitude && it.longitude
-                                ? `(${it.latitude}, ${it.longitude})`
-                                : ""}
-                            </span>
-                          )}
-                          {it.ask_location && <span>запрашивать гео</span>}
-                          <span>
-                            {Array.isArray(it.accessPersons)
-                              ? it.accessPersons.length
-                              : 0}{" "}
-                            сотрудников с доступом
-                          </span>
+                      {entity === "task" && (
+                        <div>
+                          <div className="font-medium">
+                            {it.title || "Без названия"}
+                          </div>
+                          <div className="text-muted-foreground">{it.status}</div>
                         </div>
+                      )}
+                    </td>
+
+                    <td className="p-2 align-top">
+                      {formatDateTimeRu(it.updatedAt || it.createdAt)}
+                    </td>
+
+                    <td className="p-2 text-right">
+                      <div className="flex gap-2 justify-end">
+                        <button
+                          className={iconBtn}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEdit(it);
+                          }}
+                          title="Изменить"
+                          aria-label="Изменить"
+                        >
+                          <Icon.Pencil />
+                        </button>
+
+                        <button
+                          className={iconBtn}
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            await toggleArchive(it);
+                          }}
+                          title={!!it.archived ? "Убрать из архива" : "В архив"}
+                          aria-label={!!it.archived ? "Убрать из архива" : "В архив"}
+                        >
+                          {!!it.archived ? <Icon.Unarchive /> : <Icon.Archive />}
+                        </button>
+
+                        <button
+                          className={`${iconBtn} border-red-200 hover:bg-red-50 text-red-600`}
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            await api(`/api/${entity}/${it._id}`, { method: "DELETE" });
+                            load();
+                          }}
+                          title="Удалить"
+                          aria-label="Удалить"
+                        >
+                          <Icon.Trash />
+                        </button>
                       </div>
-                    )}
+                    </td>
+                  </tr>
+                );
+              })}
 
-                    {entity === "person" && (
-                      <div>
-                        <div className="font-medium">{fio(it) || "(Без имени)"}</div>
-                        <div className="text-muted-foreground">
-                          {it.email || ""}
-                          {it.position ? ` * ${it.position}` : ""}
-                          {it.phone ? ` * ${it.phone}` : ""}
-                          {it.telegramId ? ` * tg:${it.telegramId}` : ""}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1">
-                          {extraLine}
-                        </div>
-                      </div>
-                    )}
-
-                    {entity === "task" && (
-                      <div>
-                        <div className="font-medium">
-                          {it.title || "Без названия"}
-                        </div>
-                        <div className="text-muted-foreground">{it.status}</div>
-                      </div>
-                    )}
-                  </td>
-
-                  <td className="p-2 align-top">
-                    {formatDateTimeRu(it.updatedAt || it.createdAt)}
-                  </td>
-
-                  <td className="p-2 text-right">
-                    <div className="flex gap-2 justify-end">
-                      <button
-                        className={iconBtn}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEdit(it);
-                        }}
-                        title="Изменить"
-                        aria-label="Изменить"
-                      >
-                        <Icon.Pencil />
-                      </button>
-
-                      <button
-                        className={iconBtn}
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          await toggleArchive(it);
-                        }}
-                        title={!!it.archived ? "Убрать из архива" : "В архив"}
-                        aria-label={!!it.archived ? "Убрать из архива" : "В архив"}
-                      >
-                        {!!it.archived ? <Icon.Unarchive /> : <Icon.Archive />}
-                      </button>
-
-                      <button
-                        className={`${iconBtn} border-red-200 hover:bg-red-50 text-red-600`}
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          await api(`/api/${entity}/${it._id}`, { method: "DELETE" });
-                          load();
-                        }}
-                        title="Удалить"
-                        aria-label="Удалить"
-                      >
-                        <Icon.Trash />
-                      </button>
-                    </div>
+              {rows.length === 0 && (
+                <tr>
+                  <td className="p-4 text-center text-muted-foreground" colSpan={4}>
+                    Данных нет
                   </td>
                 </tr>
-              );
-            })}
-
-            {rows.length === 0 && (
-              <tr>
-                <td className="p-4 text-center text-muted-foreground" colSpan={4}>
-                  Данных нет
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Модал */}
       {edit && (
@@ -883,6 +910,133 @@ export default function EntityTable({
               </div>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProjectPortfolioList({
+  groups,
+  openPortfolios,
+  onTogglePortfolio,
+  onOpenProject,
+  onEditProject,
+  onToggleArchive,
+  onDeleteProject,
+}: {
+  groups: { portfolio: string; projects: any[] }[];
+  openPortfolios: Record<string, boolean>;
+  onTogglePortfolio: (portfolio: string) => void;
+  onOpenProject: (project: any) => void;
+  onEditProject: (project: any) => void;
+  onToggleArchive: (project: any) => Promise<void>;
+  onDeleteProject: (project: any) => Promise<void>;
+}) {
+  return (
+    <div className="space-y-3 max-h-[70vh] overflow-auto">
+      {groups.map((group) => {
+        const isOpen = openPortfolios[group.portfolio] ?? true;
+        return (
+          <div key={group.portfolio} className="rounded-2xl border overflow-hidden">
+            <button
+              type="button"
+              className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-muted/40 text-left"
+              onClick={() => onTogglePortfolio(group.portfolio)}
+            >
+              <div>
+                <div className="font-medium">{group.portfolio}</div>
+                <div className="text-xs text-muted-foreground">
+                  {group.projects.length} проект(ов)
+                </div>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {isOpen ? "Свернуть" : "Развернуть"}
+              </span>
+            </button>
+
+            {isOpen && (
+              <div className="divide-y">
+                {group.projects.map((project, idx) => (
+                  <div
+                    key={project._id || idx}
+                    className="px-4 py-3 hover:bg-muted/30 transition cursor-pointer"
+                    onClick={() => onOpenProject(project)}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">
+                          {project.name || "Без названия"}
+                        </div>
+                        <div className="text-xs text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 mt-1">
+                          {project.description ? (
+                            <span className="truncate max-w-[30ch]">
+                              {project.description}
+                            </span>
+                          ) : null}
+                          {project.address || (project.latitude && project.longitude) ? (
+                            <span className="truncate max-w-[34ch]">
+                              {project.address
+                                ? project.address
+                                : project.latitude && project.longitude
+                                ? `(${project.latitude}, ${project.longitude})`
+                                : ""}
+                            </span>
+                          ) : null}
+                          {project.ask_location ? <span>запрашивать гео</span> : null}
+                          <span>
+                            {Array.isArray(project.accessPersons)
+                              ? project.accessPersons.length
+                              : 0}{" "}
+                            сотрудников с доступом
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          className={iconBtn}
+                          onClick={() => onEditProject(project)}
+                          title="Изменить"
+                          aria-label="Изменить"
+                        >
+                          <Icon.Pencil />
+                        </button>
+                        <button
+                          className={iconBtn}
+                          onClick={async () => onToggleArchive(project)}
+                          title={!!project.archived ? "Убрать из архива" : "В архив"}
+                          aria-label={!!project.archived ? "Убрать из архива" : "В архив"}
+                        >
+                          {!!project.archived ? <Icon.Unarchive /> : <Icon.Archive />}
+                        </button>
+                        <button
+                          className={`${iconBtn} border-red-200 hover:bg-red-50 text-red-600`}
+                          onClick={async () => onDeleteProject(project)}
+                          title="Удалить"
+                          aria-label="Удалить"
+                        >
+                          <Icon.Trash />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {group.projects.length === 0 && (
+                  <div className="px-4 py-4 text-sm text-muted-foreground">
+                    Проектов нет
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {groups.length === 0 && (
+        <div className="rounded-2xl border px-4 py-6 text-center text-muted-foreground">
+          Данных нет
         </div>
       )}
     </div>

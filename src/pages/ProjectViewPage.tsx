@@ -184,23 +184,38 @@ function AccessChecklist({
   );
 }
 
+export type ProjectViewTab =
+  | "about"
+  | "tasks"
+  | "access"
+  | "files"
+  | "worklog"
+  | "specs";
+
+export type ProjectViewSpecMode =
+  | "editor"
+  | "shipment"
+  | "execution"
+  | "summary"
+  | "vor";
+
 export default function ProjectViewPage({
   projectId,
+  initialTab = "about",
+  initialSpecMode = "editor",
   onBack,
 }: {
   projectId: string;
+  initialTab?: ProjectViewTab;
+  initialSpecMode?: ProjectViewSpecMode;
   onBack: () => void;
 }) {
   const [project, setProject] = useState<any>(null);
 
-  const [tab, setTab] = useState<
-    "tasks" | "access" | "files" | "worklog" | "specs"
-  >("specs");
+  const [tab, setTab] = useState<ProjectViewTab>(initialTab);
 
   // режим внутри вкладки Спецификации
-  const [specMode, setSpecMode] = useState<
-    "editor" | "shipment" | "execution" | "summary" | "vor"
-  >("editor");
+  const [specMode, setSpecMode] = useState<ProjectViewSpecMode>(initialSpecMode);
 
   // задачи
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -233,7 +248,6 @@ export default function ProjectViewPage({
   const [uploading, setUploading] = useState(false);
 
   // О проекте / Адрес
-  const [geoOpen, setGeoOpen] = useState(false);
   const [projectModalTab, setProjectModalTab] = useState<"about" | "address">(
     "about"
   );
@@ -254,6 +268,14 @@ export default function ProjectViewPage({
     ask_location: true,
     radius_m: 350,
   });
+
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab, projectId]);
+
+  useEffect(() => {
+    setSpecMode(initialSpecMode);
+  }, [initialSpecMode, projectId]);
 
   useEffect(() => {
     if (!project) return;
@@ -430,7 +452,6 @@ export default function ProjectViewPage({
       body: JSON.stringify(payload),
     });
     await loadProject();
-    setGeoOpen(false);
   }
 
   return (
@@ -450,22 +471,16 @@ export default function ProjectViewPage({
               {project?.name || "Проект"}{" "}
             </div>
 
-            {/* гео-кнопка + вкладки */}
-            <div className="rounded-md px-2 py-1 inline-flex items-center gap-1">
+            <div className="flex items-center gap-2 ml-2 flex-wrap">
               <button
-                className="rounded-md border px-2 py-1 inline-flex items-center gap-1"
-                onClick={() => {
-                  setProjectModalTab("about");
-                  setGeoOpen(true);
-                }}
                 type="button"
+                className={`rounded-xl border px-3 py-1 ${
+                  tab === "about" ? "bg-muted/50" : ""
+                }`}
+                onClick={() => setTab("about")}
               >
-                <Icon.MapPin />
                 О проекте
               </button>
-            </div>
-
-            <div className="flex items-center gap-2 ml-2 flex-wrap">
               <button
                 type="button"
                 className={`rounded-xl border px-3 py-1 ${
@@ -762,270 +777,253 @@ export default function ProjectViewPage({
       )}
 
       {/* О проекте / Адрес */}
-      {geoOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-center">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setGeoOpen(false)}
-          />
-          <div className="relative w-[min(720px,96vw)] rounded-2xl bg-background p-6 shadow-2xl space-y-4">
-            {/* заголовок */}
-            <div className="text-lg font-semibold inline-flex items-center gap-2">
-              <Icon.MapPin />
+      {tab === "about" && (
+        <div className="rounded-2xl border bg-background p-6 space-y-4">
+          <div className="text-lg font-semibold inline-flex items-center gap-2">
+            <Icon.MapPin />
+            О проекте
+          </div>
+
+          <div className="flex gap-2 border-b pb-2">
+            <button
+              type="button"
+              className={`rounded-xl px-3 py-1 text-sm ${
+                projectModalTab === "about" ? "bg-muted/70 border" : ""
+              }`}
+              onClick={() => setProjectModalTab("about")}
+            >
               О проекте
-            </div>
+            </button>
+            <button
+              type="button"
+              className={`rounded-xl px-3 py-1 text-sm ${
+                projectModalTab === "address" ? "bg-muted/70 border" : ""
+              }`}
+              onClick={() => setProjectModalTab("address")}
+            >
+              Адрес
+            </button>
+          </div>
 
-            {/* вкладки внутри модалки */}
-            <div className="flex gap-2 border-b pb-2">
-              <button
-                type="button"
-                className={`rounded-xl px-3 py-1 text-sm ${
-                  projectModalTab === "about" ? "bg-muted/70 border" : ""
-                }`}
-                onClick={() => setProjectModalTab("about")}
-              >
-                О проекте
-              </button>
-              <button
-                type="button"
-                className={`rounded-xl px-3 py-1 text-sm ${
-                  projectModalTab === "address" ? "bg-muted/70 border" : ""
-                }`}
-                onClick={() => setProjectModalTab("address")}
-              >
+          {projectModalTab === "about" && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label className="text-sm md:col-span-2">
+                Наименование проекта
+                <input
+                  className="w-full rounded-xl border px-3 py-2 mt-1"
+                  value={geoForm.name}
+                  onChange={(e) =>
+                    setGeoForm((f) => ({ ...f, name: e.target.value }))
+                  }
+                />
+              </label>
+
+              <label className="text-sm">
+                Дата начала
+                <input
+                  type="date"
+                  className="w-full rounded-xl border px-3 py-2 mt-1"
+                  value={geoForm.start_date || ""}
+                  onChange={(e) =>
+                    setGeoForm((f) => ({
+                      ...f,
+                      start_date: e.target.value,
+                    }))
+                  }
+                />
+              </label>
+
+              <label className="text-sm">
+                Дата окончания
+                <input
+                  type="date"
+                  className="w-full rounded-xl border px-3 py-2 mt-1"
+                  value={geoForm.end_date || ""}
+                  onChange={(e) =>
+                    setGeoForm((f) => ({
+                      ...f,
+                      end_date: e.target.value,
+                    }))
+                  }
+                />
+              </label>
+
+              <label className="text-sm md:col-span-2">
+                Инвестор
+                <input
+                  className="w-full rounded-xl border px-3 py-2 mt-1"
+                  value={geoForm.investor}
+                  onChange={(e) =>
+                    setGeoForm((f) => ({
+                      ...f,
+                      investor: e.target.value,
+                    }))
+                  }
+                />
+              </label>
+
+              <label className="text-sm md:col-span-2">
+                Заказчик
+                <input
+                  className="w-full rounded-xl border px-3 py-2 mt-1"
+                  value={geoForm.customer}
+                  onChange={(e) =>
+                    setGeoForm((f) => ({
+                      ...f,
+                      customer: e.target.value,
+                    }))
+                  }
+                />
+              </label>
+
+              <label className="text-sm md:col-span-2">
+                Исполнитель
+                <input
+                  className="w-full rounded-xl border px-3 py-2 mt-1"
+                  value={geoForm.executor}
+                  onChange={(e) =>
+                    setGeoForm((f) => ({
+                      ...f,
+                      executor: e.target.value,
+                    }))
+                  }
+                />
+              </label>
+
+              <label className="text-sm md:col-span-2">
+                Ответственный
+                <select
+                  className="w-full rounded-xl border px-3 py-2 mt-1"
+                  value={geoForm.responsible_id ?? ""}
+                  onChange={(e) =>
+                    setGeoForm((f) => ({
+                      ...f,
+                      responsible_id: e.target.value || "",
+                    }))
+                  }
+                >
+                  <option value="">— не выбран —</option>
+                  {personsOptions.map((p) => (
+                    <option key={String(p.id)} value={String(p.id)}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
+
+          {projectModalTab === "address" && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label className="text-sm md:col-span-2">
                 Адрес
-              </button>
-            </div>
+                <input
+                  className="w-full rounded-xl border px-3 py-2 mt-1"
+                  value={geoForm.address}
+                  onChange={(e) =>
+                    setGeoForm((f) => ({ ...f, address: e.target.value }))
+                  }
+                />
+              </label>
 
-            {/* содержимое вкладок */}
-            {projectModalTab === "about" && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <label className="text-sm md:col-span-2">
-                  Наименование проекта
-                  <input
-                    className="w-full rounded-xl border px-3 py-2 mt-1"
-                    value={geoForm.name}
-                    onChange={(e) =>
-                      setGeoForm((f) => ({ ...f, name: e.target.value }))
-                    }
-                  />
-                </label>
+              <label className="text-sm">
+                Широта
+                <input
+                  className="w-full rounded-xl border px-3 py-2 mt-1"
+                  inputMode="decimal"
+                  placeholder="55.7558"
+                  value={geoForm.latitude}
+                  onChange={(e) =>
+                    setGeoForm((f) => ({ ...f, latitude: e.target.value }))
+                  }
+                />
+              </label>
 
-                <label className="text-sm">
-                  Дата начала
-                  <input
-                    type="date"
-                    className="w-full rounded-xl border px-3 py-2 mt-1"
-                    value={geoForm.start_date || ""}
-                    onChange={(e) =>
-                      setGeoForm((f) => ({
-                        ...f,
-                        start_date: e.target.value,
-                      }))
-                    }
-                  />
-                </label>
+              <label className="text-sm">
+                Долгота
+                <input
+                  className="w-full rounded-xl border px-3 py-2 mt-1"
+                  inputMode="decimal"
+                  placeholder="37.6176"
+                  value={geoForm.longitude}
+                  onChange={(e) =>
+                    setGeoForm((f) => ({ ...f, longitude: e.target.value }))
+                  }
+                />
+              </label>
 
-                <label className="text-sm">
-                  Дата окончания
-                  <input
-                    type="date"
-                    className="w-full rounded-xl border px-3 py-2 mt-1"
-                    value={geoForm.end_date || ""}
-                    onChange={(e) =>
-                      setGeoForm((f) => ({
-                        ...f,
-                        end_date: e.target.value,
-                      }))
-                    }
-                  />
-                </label>
-
-                <label className="text-sm md:col-span-2">
-                  Инвестор
-                  <input
-                    className="w-full rounded-xl border px-3 py-2 mt-1"
-                    value={geoForm.investor}
-                    onChange={(e) =>
-                      setGeoForm((f) => ({
-                        ...f,
-                        investor: e.target.value,
-                      }))
-                    }
-                  />
-                </label>
-
-                <label className="text-sm md:col-span-2">
-                  Заказчик
-                  <input
-                    className="w-full rounded-xl border px-3 py-2 mt-1"
-                    value={geoForm.customer}
-                    onChange={(e) =>
-                      setGeoForm((f) => ({
-                        ...f,
-                        customer: e.target.value,
-                      }))
-                    }
-                  />
-                </label>
-
-                <label className="text-sm md:col-span-2">
-                  Исполнитель
-                  <input
-                    className="w-full rounded-xl border px-3 py-2 mt-1"
-                    value={geoForm.executor}
-                    onChange={(e) =>
-                      setGeoForm((f) => ({
-                        ...f,
-                        executor: e.target.value,
-                      }))
-                    }
-                  />
-                </label>
-
-                <label className="text-sm md:col-span-2">
-                  Ответственный
-                  <select
-                    className="w-full rounded-xl border px-3 py-2 mt-1"
-                    value={geoForm.responsible_id ?? ""}
-                    onChange={(e) =>
-                      setGeoForm((f) => ({
-                        ...f,
-                        responsible_id: e.target.value || "",
-                      }))
-                    }
+              {mapLinks && (
+                <div className="md:col-span-2 text-xs text-muted-foreground">
+                  Открыть в картах:{" "}
+                  <a
+                    href={mapLinks.yandex}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline hover:no-underline"
                   >
-                    <option value="">— не выбран —</option>
-                    {personsOptions.map((p) => (
-                      <option key={String(p.id)} value={String(p.id)}>
-                        {p.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-            )}
+                    Яндекс.Карты
+                  </a>{" "}
+                  {" · "}
+                  <a
+                    href={mapLinks.google}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline hover:no-underline"
+                  >
+                    Google Maps
+                  </a>
+                </div>
+              )}
 
-            {projectModalTab === "address" && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <label className="text-sm md:col-span-2">
-                  Адрес
-                  <input
-                    className="w-full rounded-xl border px-3 py-2 mt-1"
-                    value={geoForm.address}
-                    onChange={(e) =>
-                      setGeoForm((f) => ({ ...f, address: e.target.value }))
-                    }
-                  />
-                </label>
+              <label className="text-sm md:col-span-2">
+                Радиус (м)
+                <input
+                  type="number"
+                  min={10}
+                  max={5000}
+                  step={10}
+                  className="w-full rounded-xl border px-3 py-2 mt-1"
+                  value={geoForm.radius_m}
+                  onChange={(e) =>
+                    setGeoForm((f) => ({
+                      ...f,
+                      radius_m: Math.max(
+                        10,
+                        Math.min(5000, Number(e.target.value) || 0)
+                      ),
+                    }))
+                  }
+                />
+                <span className="text-xs text-muted-foreground">
+                  Радиус допуска (10-5000)
+                </span>
+              </label>
 
-                <label className="text-sm">
-                  Широта
-                  <input
-                    className="w-full rounded-xl border px-3 py-2 mt-1"
-                    inputMode="decimal"
-                    placeholder="55.7558"
-                    value={geoForm.latitude}
-                    onChange={(e) =>
-                      setGeoForm((f) => ({ ...f, latitude: e.target.value }))
-                    }
-                  />
-                </label>
-
-                <label className="text-sm">
-                  Долгота
-                  <input
-                    className="w-full rounded-xl border px-3 py-2 mt-1"
-                    inputMode="decimal"
-                    placeholder="37.6176"
-                    value={geoForm.longitude}
-                    onChange={(e) =>
-                      setGeoForm((f) => ({ ...f, longitude: e.target.value }))
-                    }
-                  />
-                </label>
-
-                {mapLinks && (
-                  <div className="md:col-span-2 text-xs text-muted-foreground">
-                    Открыть в картах:{" "}
-                    <a
-                      href={mapLinks.yandex}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="underline hover:no-underline"
-                    >
-                      Яндекс.Карты
-                    </a>{" "}
-                    {" · "}
-                    <a
-                      href={mapLinks.google}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="underline hover:no-underline"
-                    >
-                      Google Maps
-                    </a>
-                  </div>
-                )}
-
-                <label className="text-sm md:col-span-2">
-                  Радиус (м)
-                  <input
-                    type="number"
-                    min={10}
-                    max={5000}
-                    step={10}
-                    className="w-full rounded-xl border px-3 py-2 mt-1"
-                    value={geoForm.radius_m}
-                    onChange={(e) =>
-                      setGeoForm((f) => ({
-                        ...f,
-                        radius_m: Math.max(
-                          10,
-                          Math.min(5000, Number(e.target.value) || 0)
-                        ),
-                      }))
-                    }
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    Радиус допуска (10-5000)
-                  </span>
-                </label>
-
-                <label className="flex items-center gap-2 md:col-span-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={geoForm.ask_location}
-                    onChange={(e) =>
-                      setGeoForm((f) => ({
-                        ...f,
-                        ask_location: e.target.checked,
-                      }))
-                    }
-                  />
-                  Запрашивать геолокацию у проекта
-                </label>
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                className="rounded-xl border px-4 py-2 inline-flex items-center gap-2"
-                onClick={() => setGeoOpen(false)}
-              >
-                <Icon.X />
-                Закрыть
-              </button>
-              <button
-                type="button"
-                className="rounded-xl border px-4 py-2 inline-flex items-center gap-2 bg-muted/50"
-                onClick={saveGeo}
-              >
-                <Icon.Check />
-                Сохранить
-              </button>
+              <label className="flex items-center gap-2 md:col-span-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={geoForm.ask_location}
+                  onChange={(e) =>
+                    setGeoForm((f) => ({
+                      ...f,
+                      ask_location: e.target.checked,
+                    }))
+                  }
+                />
+                Запрашивать геолокацию у проекта
+              </label>
             </div>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              className="rounded-xl border px-4 py-2 inline-flex items-center gap-2 bg-muted/50"
+              onClick={saveGeo}
+            >
+              <Icon.Check />
+              Сохранить
+            </button>
           </div>
         </div>
       )}
